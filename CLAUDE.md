@@ -20,6 +20,13 @@ Read `docs/DESIGN.md` and `docs/HANDOFF.md` before doing anything.
   to look.
 - **No em dashes (U+2014) anywhere** - code, comments, docs, commit messages.
   Use an ASCII hyphen `-` or restructure.
+- **Code standard (hard rule):** all code and structural design must be
+  professional review-grade work, the bar being software for the
+  military/Air Force/DoD: strict idiomatic Rust design patterns, human
+  readability and ease of understanding/extensibility first, and elegant
+  simplicity and modularity that an experienced senior engineer would sign
+  off on. No `unsafe`. Typed errors, no stringly-typed protocol surfaces,
+  documented invariants, tests for pure logic.
 - Commits: no trailers/footers ever (no Claude Code footer, no
   Co-Authored-By).
 
@@ -46,12 +53,8 @@ Read `docs/DESIGN.md` and `docs/HANDOFF.md` before doing anything.
 
 ## Decision policy
 
-- Settle architecture/library/design picks with an independent Codex
-  red-team, then decide autonomously on the merits (do not defer
-  automatically, do not AskUserQuestion for those). Pattern:
-  `codex exec --sandbox read-only -c tools.web_search=true "..." < /dev/null`
-  (needs Bash sandbox off + a timeout; codex hangs reading stdin otherwise).
-  Make Codex investigate independently; do not feed it our conclusions.
+- Settle architecture/library/design picks autonomously on the merits (do
+  not defer automatically, do not AskUserQuestion for those).
 - Never contrive: if an approach fails, report the finding; do not paper over
   it with a workaround that hides the failure.
 
