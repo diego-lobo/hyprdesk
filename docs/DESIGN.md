@@ -1,8 +1,17 @@
 # DESIGN - hyprdesk
 
-Status: DRAFT scaffold. The architecture pick below is a RECOMMENDATION from
-the investigating session, not a decision. Red-team it with Codex (see
-CLAUDE.md decision policy) before building.
+Status: DECIDED 2026-07-26. Architecture B (IPC-based emulation) in Rust:
+a resident daemon plus thin CLI client, single binary. Rationale: the plugin
+route (A) couples to internal C++ headers that drift every release - the
+exact failure class this project escapes - and a Rust in-process plugin
+would additionally need a C++ shim carrying that same burden (Hyprland's
+plugin ABI passes std::string/SP<> across the boundary; no C ABI exists).
+The IPC surface is the stable public contract. Known trade-off: batched
+multi-monitor switches are not compositor-atomic (possible one-frame
+stagger); to be measured in practice - if it proves visibly bad, that
+finding reopens route A.
+
+Upstream behavior reference extracted to `docs/UPSTREAM-SEMANTICS.md`.
 
 ## Product behavior (what "done" looks like)
 
@@ -60,23 +69,52 @@ Sketch:
 - **Waybar:** full custom control BONUS - a custom module (or workspace
   format mapping) can show the DESK number cleanly, fixing the "desk 2
   highlights ws 3+4" cosmetic wart the plugin route would have had.
+  IMPLEMENTED 2026-07-26: `hyprdesk waybar` streams custom-module JSON
+  (protocol `Request::Subscribe(StreamFormat::Waybar)`, rendering in
+  `src/waybar.rs`); `~/.config/waybar/config.jsonc` replaces
+  `hyprland/workspaces` with `custom/hyprdesk`. Occupancy is desk-level
+  (a desk is occupied if ANY of its workspaces has windows, across all
+  monitors - aggregation waybar's own module cannot do). Visuals mirror
+  stock Omarchy: desks 1-5 persistent (dimmed via pango alpha when
+  empty), 6-10 appear only while occupied, active desk is the stock dot
+  glyph. Scroll on the module cycles desks; per-desk click targets are
+  impossible in a single custom module (accepted).
 
 Known caveat to evaluate honestly: a batched multi-dispatch switch is not
 compositor-atomic; there may be a visible one-frame stagger between
 monitors. Measure it in practice before declaring it acceptable (upstream
 plugin A does not have this issue).
 
-### Sub-decisions for B (open)
+### Sub-decisions for B (decided 2026-07-26)
 
-- Stateless per-keypress CLI vs. small resident daemon (hotplug + waybar
-  push argue for a tiny daemon or a CLI + separate listener).
-- Language: bash (fastest to iterate) vs. Rust (Diego's main toolchain,
-  single static binary, raw UNIX-socket IPC is dependency-free; socket path
-  `$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket{,2}.sock`).
-- Focus behavior after switch (which monitor keeps focus); interaction with
-  the special/scratchpad workspace; what SUPER+SHIFT+ALT+arrows
-  (`movecurrentworkspacetomonitor`) should mean once desks are welded -
-  probably unbind or repurpose, since it breaks the weld.
+- **Daemon + CLI client in one binary** (`hyprdesk daemon` vs subcommands).
+  Daemon holds desk state (current/last), listens on socket2 for
+  hotplug/config events, serves clients on its own control socket at
+  `$XDG_RUNTIME_DIR/hyprdesk/$HYPRLAND_INSTANCE_SIGNATURE.sock`. Hyprland
+  sockets: `$XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket{,2}.sock`.
+- **Language: Rust.** std UNIX sockets for all IPC; serde_json for parsing
+  `hyprctl -j`-equivalent query replies (hand-rolled JSON parsing is not
+  worth the brittleness).
+- **Monitor index** = position in the monitor list sorted by Hyprland
+  monitor id (eDP-1 is id 0 on this machine; externals enumerate after).
+  Desk `d` (1..=10) on monitor index `m` = workspace `d + 10*m`. Deviation
+  from upstream's consecutive-block mapping, on purpose: workspace ids keep
+  their desk meaning across monitor-count changes (no layout memory needed),
+  waybar stays legible (last digit = desk), and `workspace = N, monitor:X`
+  rules can pin every workspace to its monitor.
+- **Focus after switch:** upstream parity - the previously focused monitor
+  is switched last so focus and cursor stay on it.
+- **Same-desk re-press:** no-op in v1 (upstream swaps workspaces between two
+  monitors; that fights the pinning rules; revisit as an option).
+- **Undock (monitor removed):** windows on the removed monitor's workspace
+  `d+10m` are merged into the surviving desk workspace `d` for every desk,
+  so nothing becomes unreachable. Redock does not un-merge (accepted).
+- **Special/scratchpad workspace:** untouched; negative workspace ids are
+  ignored by the daemon entirely.
+- **SUPER+SHIFT+ALT+arrows** (`movecurrentworkspacetomonitor`): unbind at
+  keybind-wiring time; it breaks the weld and has no desk-world meaning.
+- **nextdesk/prevdesk:** bounded 1..=10; plain forms clamp, cycle forms
+  wrap (upstream's unbounded desk creation does not fit a 10-key row).
 
 ## Keybind plan (agreed with Diego during investigation)
 
@@ -104,8 +142,7 @@ SUPER+SHIFT+ALT+arrows: decide in sub-decisions above.
 
 1. Read `reference/` source for exact upstream semantics (especially
    moveToDesk focus handling and hotplug re-weld logic).
-2. Codex red-team the A-vs-B pick and the B sub-decisions (independent
-   research, do not feed it this doc's conclusions first).
+2. Settle the A-vs-B pick and the B sub-decisions on the merits.
 3. Decide, record the decision here (flip Status off DRAFT), scaffold the
    implementation (cargo init or scripts/), build, then wire keybinds last -
    config changes only after the tool works from the command line.
