@@ -1,0 +1,7 @@
+# Upstream plugin clone (re-fetch with scripts/fetch-reference.sh)
+reference/
+
+# Build artifacts
+build/
+target/
+*.so
