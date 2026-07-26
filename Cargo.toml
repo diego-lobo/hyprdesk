@@ -1,0 +1,19 @@
+[package]
+name = "hyprdesk"
+version = "0.1.0"
+edition = "2024"
+description = "Shared-monitor virtual desktops for Hyprland, driven over stable IPC"
+
+[dependencies]
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+pedantic = { level = "warn", priority = -1 }
+# Doc-noise lints: a small binary crate; the typed Error enum and the
+# documented panics-free invariants carry this information already.
+missing_errors_doc = "allow"
+missing_panics_doc = "allow"
