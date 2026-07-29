@@ -108,7 +108,19 @@ plugin A does not have this issue).
   monitors; that fights the pinning rules; revisit as an option).
 - **Undock (monitor removed):** windows on the removed monitor's workspace
   `d+10m` are merged into the surviving desk workspace `d` for every desk,
-  so nothing becomes unreachable. Redock does not un-merge (accepted).
+  so nothing becomes unreachable. REVISED 2026-07-29: redock now DOES
+  un-merge, via window memory. Suspend (s2idle) drops the DP link, so
+  Hyprland tears the external monitor down on every sleep and each wake
+  looked like a fresh dock with all windows stranded on the laptop
+  (verified in the Hyprland log: "Connector DP-2 disconnected" during
+  suspend). The daemon remembers each evacuated window's home workspace
+  at merge time and sends it back when the monitor slot returns; windows
+  that closed or that the user re-placed while undocked are left alone
+  and forgotten. Memory is keyed by monitor slot, not name, so it also
+  covers a monitor re-enumerating under a new connector name. Upstream
+  gets the same effect from per-monitor-set layout caches
+  (`rememberlayout = monitors`) because it moves workspaces between
+  monitors rather than windows between workspaces.
 - **Special/scratchpad workspace:** untouched; negative workspace ids are
   ignored by the daemon entirely.
 - **SUPER+SHIFT+ALT+arrows** (`movecurrentworkspacetomonitor`): unbind at

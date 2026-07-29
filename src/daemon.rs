@@ -16,6 +16,7 @@ use crate::hypr;
 use crate::model::{DeskId, monitor_index_of};
 use crate::protocol::{Direction, MoveMode, Request, StatusFormat, StreamFormat};
 use crate::waybar;
+use std::collections::BTreeMap;
 use std::fs;
 use std::io::{BufRead, BufReader, Write};
 use std::os::unix::net::{UnixListener, UnixStream};
@@ -51,6 +52,13 @@ struct Daemon {
     /// Last waybar line streamed, to suppress no-op updates from the
     /// chatty window events that feed occupancy.
     waybar_cache: String,
+    /// Window memory: windows evacuated from a vanished monitor slot,
+    /// keyed by window address, holding the home workspace to restore
+    /// when that monitor returns. Suspend drops the external monitor's
+    /// link, so every sleep looks like an undock; this map is how wake
+    /// puts the layout back. Entries live only while the home slot is
+    /// missing (see [`restore_commands`]).
+    displaced: BTreeMap<String, i64>,
 }
 
 pub fn run() -> Result<()> {
@@ -59,6 +67,7 @@ pub fn run() -> Result<()> {
         last: None,
         subscribers: Vec::new(),
         waybar_cache: String::new(),
+        displaced: BTreeMap::new(),
     };
 
     // Initial weld: pin rules, repatriate existing workspaces, apply the
@@ -311,10 +320,11 @@ impl Daemon {
     }
 
     /// Full re-weld, used at startup and on monitor hotplug: re-pin rules,
-    /// repatriate desk workspaces to their owning monitors, merge windows
-    /// from workspaces whose monitor slot no longer exists into the desk's
-    /// primary workspace (nothing may become unreachable; redock does not
-    /// un-merge, per DESIGN), then re-apply the current desk.
+    /// repatriate desk workspaces to their owning monitors, evacuate
+    /// windows from workspaces whose monitor slot no longer exists into
+    /// the desk's primary workspace (nothing may become unreachable),
+    /// send previously evacuated windows home if their slot is back
+    /// (window memory), then re-apply the current desk.
     fn reweld(&mut self) -> Result<()> {
         let monitors = hypr::monitors()?;
         if monitors.is_empty() {
@@ -335,19 +345,17 @@ impl Daemon {
             };
             match monitors.get(slot) {
                 None => {
-                    // Stranded: its monitor slot is gone.
+                    // Stranded: its monitor slot is gone. Evacuate each
+                    // window to the desk's primary workspace and remember
+                    // its home so a returning monitor gets it back.
                     let target = desk.workspace_on(0);
-                    commands.extend(
-                        clients
-                            .iter()
-                            .filter(|client| client.workspace.id == workspace.id)
-                            .map(|client| {
-                                format!(
-                                    "dispatch movetoworkspacesilent {target},address:{}",
-                                    client.address
-                                )
-                            }),
-                    );
+                    for client in clients.iter().filter(|c| c.workspace.id == workspace.id) {
+                        self.displaced.insert(client.address.clone(), workspace.id);
+                        commands.push(format!(
+                            "dispatch movetoworkspacesilent {target},address:{}",
+                            client.address
+                        ));
+                    }
                 }
                 Some(owner) if workspace.monitor.as_deref() != Some(owner.name.as_str()) => {
                     commands.push(format!(
@@ -359,11 +367,49 @@ impl Daemon {
             }
         }
 
+        commands.extend(restore_commands(
+            &mut self.displaced,
+            monitors.len(),
+            &clients,
+        ));
         commands.extend(switch_commands(self.current, &monitors));
         hypr::batch(&commands)?;
         self.notify_subscribers();
         Ok(())
     }
+}
+
+/// Commands sending displaced windows home, run on every re-weld. An
+/// entry survives only while its home monitor slot is still missing; the
+/// moment the slot is back the entry's fate is settled in one pass: the
+/// window is sent home if it still sits where evacuation left it, and
+/// forgotten otherwise (closed, or deliberately re-placed by the user
+/// while displaced - a placement we must respect, not undo).
+fn restore_commands(
+    displaced: &mut BTreeMap<String, i64>,
+    monitor_count: usize,
+    clients: &[hypr::Client],
+) -> Vec<String> {
+    let mut commands = Vec::new();
+    displaced.retain(|address, home| {
+        let (Some(desk), Some(slot)) = (DeskId::of_workspace(*home), monitor_index_of(*home))
+        else {
+            return false; // impossible by construction; drop defensively
+        };
+        if slot >= monitor_count {
+            return true; // home monitor still absent: keep waiting
+        }
+        let still_where_evacuated = clients.iter().any(|client| {
+            client.address == *address && client.workspace.id == desk.workspace_on(0)
+        });
+        if still_where_evacuated {
+            commands.push(format!(
+                "dispatch movetoworkspacesilent {home},address:{address}"
+            ));
+        }
+        false
+    });
+    commands
 }
 
 /// Desks with at least one window on any of their workspaces, across all
@@ -413,4 +459,67 @@ fn assert_pinning_rules(monitors: &[hypr::Monitor]) -> Result<()> {
         }
     }
     hypr::batch(&commands)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn client(address: &str, workspace: i64) -> hypr::Client {
+        hypr::Client {
+            address: address.to_string(),
+            workspace: hypr::WorkspaceRef { id: workspace },
+        }
+    }
+
+    fn displaced(entries: &[(&str, i64)]) -> BTreeMap<String, i64> {
+        entries
+            .iter()
+            .map(|(address, home)| ((*address).to_string(), *home))
+            .collect()
+    }
+
+    #[test]
+    fn window_waits_while_its_home_monitor_is_missing() {
+        // Home ws 12 lives on monitor slot 1; only one monitor is present.
+        let mut memory = displaced(&[("0xa", 12)]);
+        let commands = restore_commands(&mut memory, 1, &[client("0xa", 2)]);
+        assert!(commands.is_empty());
+        assert_eq!(memory, displaced(&[("0xa", 12)]));
+    }
+
+    #[test]
+    fn window_goes_home_when_its_monitor_returns() {
+        // Evacuation left it on ws 2 (desk 2's primary); slot 1 is back.
+        let mut memory = displaced(&[("0xa", 12)]);
+        let commands = restore_commands(&mut memory, 2, &[client("0xa", 2)]);
+        assert_eq!(
+            commands,
+            vec!["dispatch movetoworkspacesilent 12,address:0xa".to_string()]
+        );
+        assert!(memory.is_empty());
+    }
+
+    #[test]
+    fn closed_or_replaced_windows_are_left_alone_and_forgotten() {
+        // 0xa was re-placed onto another desk while displaced; 0xb closed.
+        let mut memory = displaced(&[("0xa", 12), ("0xb", 15)]);
+        let commands = restore_commands(&mut memory, 2, &[client("0xa", 7)]);
+        assert!(commands.is_empty());
+        assert!(memory.is_empty());
+    }
+
+    #[test]
+    fn restores_are_deterministic_and_batched_together() {
+        let mut memory = displaced(&[("0xb", 15), ("0xa", 12)]);
+        let commands = restore_commands(&mut memory, 2, &[client("0xa", 2), client("0xb", 5)]);
+        assert_eq!(
+            commands,
+            vec![
+                "dispatch movetoworkspacesilent 12,address:0xa".to_string(),
+                "dispatch movetoworkspacesilent 15,address:0xb".to_string(),
+            ]
+        );
+        assert!(memory.is_empty());
+    }
 }
