@@ -59,6 +59,13 @@ struct Daemon {
     /// puts the layout back. Entries live only while the home slot is
     /// missing (see [`restore_commands`]).
     displaced: BTreeMap<String, i64>,
+    /// Monitor names as of the last successful re-weld - the daemon's
+    /// notion of a settled topology. Hyprland re-juggles workspaces while
+    /// a monitor is (un)plugging and emits `workspacev2` BEFORE the
+    /// monitor event; those echoes must not be mistaken for the user
+    /// switching desks (see the `WorkspaceChanged` arm of
+    /// [`Daemon::handle_event`]).
+    welded_monitors: Vec<String>,
 }
 
 pub fn run() -> Result<()> {
@@ -68,6 +75,7 @@ pub fn run() -> Result<()> {
         subscribers: Vec::new(),
         waybar_cache: String::new(),
         displaced: BTreeMap::new(),
+        welded_monitors: Vec::new(),
     };
 
     // Initial weld: pin rules, repatriate existing workspaces, apply the
@@ -212,9 +220,18 @@ impl Daemon {
             // A config reload wipes runtime workspace rules; re-assert.
             hypr::Event::ConfigReloaded => assert_pinning_rules(&hypr::monitors()?),
             // Track desk changes made behind our back (echoes of our own
-            // batches resolve to the desk we already set).
+            // batches resolve to the desk we already set). Two guards keep
+            // Hyprland's own workspace juggling around a monitor (un)plug
+            // from corrupting `current` right before the re-weld re-applies
+            // it (seen live: a redock silently reset desk 8 to desk 1):
+            // the topology must match the last weld (juggling starts before
+            // the monitor event arrives), and every monitor must agree on
+            // one desk (juggling and app-driven activation move one monitor
+            // at a time; a real desk switch moves them all).
             hypr::Event::WorkspaceChanged => {
-                if let Some(desk) = infer_active_desk()
+                let monitors = hypr::monitors()?;
+                if monitor_names(&monitors) == self.welded_monitors
+                    && let Some(desk) = desk_shown_everywhere(&monitors)
                     && desk != self.current
                 {
                     self.record_switch(desk);
@@ -289,32 +306,13 @@ impl Daemon {
     }
 
     fn move_active_window(&mut self, desk: DeskId, mode: MoveMode) -> Result<String> {
+        let Some(address) = hypr::active_window_address()? else {
+            return Ok("ok (no active window)".to_string());
+        };
         let monitors = hypr::monitors()?;
-        // The active window lives on the focused monitor and stays there:
-        // it lands on that monitor's workspace for the target desk
-        // (upstream parity).
-        let focused_index = monitors.iter().position(|m| m.focused).unwrap_or(0);
-        let target = desk.workspace_on(focused_index);
-
-        match mode {
-            MoveMode::Silent => {
-                hypr::batch(&[format!("dispatch movetoworkspacesilent {target}")])?;
-            }
-            MoveMode::Follow => {
-                // Switch the other monitors first, then move-and-follow the
-                // window last so it ends up focused on its own monitor.
-                let mut commands: Vec<String> = monitors
-                    .iter()
-                    .enumerate()
-                    .filter(|(_, monitor)| !monitor.focused)
-                    .map(|(index, _)| format!("dispatch workspace {}", desk.workspace_on(index)))
-                    .collect();
-                commands.push(format!("dispatch movetoworkspace {target}"));
-                hypr::batch(&commands)?;
-                if desk != self.current {
-                    self.record_switch(desk);
-                }
-            }
+        hypr::batch(&move_commands(desk, mode, &monitors, &address))?;
+        if mode == MoveMode::Follow && desk != self.current {
+            self.record_switch(desk);
         }
         Ok("ok".to_string())
     }
@@ -374,9 +372,58 @@ impl Daemon {
         ));
         commands.extend(switch_commands(self.current, &monitors));
         hypr::batch(&commands)?;
+        self.welded_monitors = monitor_names(&monitors);
         self.notify_subscribers();
         Ok(())
     }
+}
+
+/// The monitor names in slot order - the daemon's notion of "topology"
+/// for the settled-topology guard on workspace events.
+fn monitor_names(monitors: &[hypr::Monitor]) -> Vec<String> {
+    monitors.iter().map(|m| m.name.clone()).collect()
+}
+
+/// The desk every monitor is showing, if they agree: monitor slot `m`
+/// must show that desk's workspace for `m`. States where monitors show
+/// pieces of different desks (mid-hotplug juggling, app-driven activation
+/// switching one monitor) resolve to `None` - a desk switch is only
+/// tracked when the world looks like exactly one desk.
+fn desk_shown_everywhere(monitors: &[hypr::Monitor]) -> Option<DeskId> {
+    let desk = DeskId::of_workspace(monitors.first()?.active_workspace.id)?;
+    monitors
+        .iter()
+        .enumerate()
+        .all(|(index, monitor)| monitor.active_workspace.id == desk.workspace_on(index))
+        .then_some(desk)
+}
+
+/// Commands moving the window at `address` to `desk`, following it there
+/// or not per `mode`. The window lands on the focused monitor's workspace
+/// for the target desk, staying on its own monitor (upstream parity).
+///
+/// The window is pinned by address throughout: a dispatch that relies on
+/// "the active window" resolves it at execution time, mid-batch, where a
+/// preceding cross-monitor `workspace` dispatch has already moved focus -
+/// the unpinned form then moves whatever window focus landed on (seen
+/// live after a redock: the stale focus pointer moved the wrong window).
+/// A follow ends with an explicit `focuswindow` for the same reason.
+fn move_commands(
+    desk: DeskId,
+    mode: MoveMode,
+    monitors: &[hypr::Monitor],
+    address: &str,
+) -> Vec<String> {
+    let focused_index = monitors.iter().position(|m| m.focused).unwrap_or(0);
+    let target = desk.workspace_on(focused_index);
+    let mut commands = vec![format!(
+        "dispatch movetoworkspacesilent {target},address:{address}"
+    )];
+    if mode == MoveMode::Follow {
+        commands.extend(switch_commands(desk, monitors));
+        commands.push(format!("dispatch focuswindow address:{address}"));
+    }
+    commands
 }
 
 /// Commands sending displaced windows home, run on every re-weld. An
@@ -479,6 +526,22 @@ mod tests {
             .collect()
     }
 
+    fn monitor(id: i64, name: &str, focused: bool, active_workspace: i64) -> hypr::Monitor {
+        hypr::Monitor {
+            id,
+            name: name.to_string(),
+            focused,
+            disabled: false,
+            active_workspace: hypr::WorkspaceRef {
+                id: active_workspace,
+            },
+        }
+    }
+
+    fn desk(id: u8) -> DeskId {
+        DeskId::new(id).expect("valid desk id in test")
+    }
+
     #[test]
     fn window_waits_while_its_home_monitor_is_missing() {
         // Home ws 12 lives on monitor slot 1; only one monitor is present.
@@ -507,6 +570,73 @@ mod tests {
         let commands = restore_commands(&mut memory, 2, &[client("0xa", 7)]);
         assert!(commands.is_empty());
         assert!(memory.is_empty());
+    }
+
+    #[test]
+    fn follow_move_pins_the_window_and_ends_focused_on_it() {
+        // Focused on the external (slot 1): the window lands on desk 5's
+        // external workspace; the switch runs the focused monitor last;
+        // focus is pinned back to the moved window, immune to the focus
+        // steal from the cross-monitor workspace dispatch.
+        let monitors = [monitor(0, "eDP-1", false, 1), monitor(1, "DP-2", true, 11)];
+        let commands = move_commands(desk(5), MoveMode::Follow, &monitors, "0xa");
+        assert_eq!(
+            commands,
+            vec![
+                "dispatch movetoworkspacesilent 15,address:0xa".to_string(),
+                "dispatch workspace 5".to_string(),
+                "dispatch workspace 15".to_string(),
+                "dispatch focuswindow address:0xa".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn silent_move_pins_the_window_and_switches_nothing() {
+        let monitors = [monitor(0, "eDP-1", true, 1), monitor(1, "DP-2", false, 11)];
+        let commands = move_commands(desk(5), MoveMode::Silent, &monitors, "0xa");
+        assert_eq!(
+            commands,
+            vec!["dispatch movetoworkspacesilent 5,address:0xa".to_string()]
+        );
+    }
+
+    #[test]
+    fn single_monitor_follow_move_still_switches_and_refocuses() {
+        let monitors = [monitor(0, "eDP-1", true, 1)];
+        let commands = move_commands(desk(3), MoveMode::Follow, &monitors, "0xb");
+        assert_eq!(
+            commands,
+            vec![
+                "dispatch movetoworkspacesilent 3,address:0xb".to_string(),
+                "dispatch workspace 3".to_string(),
+                "dispatch focuswindow address:0xb".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn a_desk_shown_on_every_monitor_is_recognized() {
+        let monitors = [monitor(0, "eDP-1", true, 2), monitor(1, "DP-2", false, 12)];
+        assert_eq!(desk_shown_everywhere(&monitors), Some(desk(2)));
+        assert_eq!(
+            desk_shown_everywhere(&[monitor(0, "eDP-1", true, 5)]),
+            Some(desk(5))
+        );
+    }
+
+    #[test]
+    fn mixed_desk_states_are_not_a_switch() {
+        // Mid-hotplug juggling: one monitor moved, the other not yet.
+        let mixed = [monitor(0, "eDP-1", true, 8), monitor(1, "DP-2", false, 12)];
+        assert_eq!(desk_shown_everywhere(&mixed), None);
+        // A workspace shown on the wrong slot is not a desk state either.
+        let misplaced = [monitor(0, "eDP-1", true, 12)];
+        assert_eq!(desk_shown_everywhere(&misplaced), None);
+        // Special workspaces and an empty monitor list resolve to nothing.
+        let special = [monitor(0, "eDP-1", true, -98)];
+        assert_eq!(desk_shown_everywhere(&special), None);
+        assert_eq!(desk_shown_everywhere(&[]), None);
     }
 
     #[test]
