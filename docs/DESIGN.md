@@ -121,6 +121,22 @@ plugin A does not have this issue).
   gets the same effect from per-monitor-set layout caches
   (`rememberlayout = monitors`) because it moves workspaces between
   monitors rather than windows between workspaces.
+- **Desk tracking guards:** ADDED 2026-07-31 after a redock silently reset
+  desk 8 to desk 1 (the reported symptom was shift+super+N needing two
+  presses). Hyprland re-juggles workspaces around a monitor (un)plug and
+  emits `workspacev2` BEFORE the monitor event, so the daemon was recording
+  that juggling as user desk switches and the re-weld then applied the
+  corrupted desk. A `workspacev2` is now only trusted when the monitor set
+  matches the last successful re-weld AND every monitor shows the same desk
+  on its own slot (`desk_shown_everywhere`); mid-juggle states always fail
+  one of the two.
+- **Address-pinned moves:** REVISED 2026-07-31. `movetodesk(silent)`
+  resolves the active window's address up front and pins every dispatch to
+  it. The unpinned "active window" dispatch form resolves the window
+  mid-batch, after a cross-monitor `workspace` dispatch has already stolen
+  focus, and was seen moving the wrong window (the stale focus pointer
+  left after a re-weld). A follow ends with an explicit `focuswindow` so
+  focus deterministically lands on the moved window.
 - **Special/scratchpad workspace:** untouched; negative workspace ids are
   ignored by the daemon entirely.
 - **SUPER+SHIFT+ALT+arrows** (`movecurrentworkspacetomonitor`): unbind at

@@ -84,6 +84,8 @@ pub struct Monitor {
     pub name: String,
     pub focused: bool,
     pub disabled: bool,
+    #[serde(rename = "activeWorkspace")]
+    pub active_workspace: WorkspaceRef,
 }
 
 #[derive(Deserialize, Debug, Clone)]
@@ -97,6 +99,17 @@ pub struct Workspace {
 pub struct Client {
     pub address: String,
     pub workspace: WorkspaceRef,
+}
+
+/// The focused window's address, if any. `activewindow` answers an empty
+/// JSON object when no window is focused.
+pub fn active_window_address() -> Result<Option<String>> {
+    #[derive(Deserialize)]
+    struct ActiveWindow {
+        address: Option<String>,
+    }
+    let window: ActiveWindow = query("activewindow")?;
+    Ok(window.address)
 }
 
 /// Enabled monitors sorted by Hyprland id. The position in this list is
