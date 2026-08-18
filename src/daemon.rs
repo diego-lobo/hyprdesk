@@ -12,7 +12,7 @@
 //! stale copy of the world.
 
 use crate::error::{Error, Result};
-use crate::hypr;
+use crate::hypr::{self, Command};
 use crate::model::{DeskId, monitor_index_of};
 use crate::protocol::{Direction, MoveMode, Request, StatusFormat, StreamFormat};
 use crate::waybar;
@@ -220,7 +220,7 @@ impl Daemon {
             // A config reload wipes runtime workspace rules; re-assert.
             hypr::Event::ConfigReloaded => assert_pinning_rules(&hypr::monitors()?),
             // Track desk changes made behind our back (echoes of our own
-            // batches resolve to the desk we already set). Two guards keep
+            // chunks resolve to the desk we already set). Two guards keep
             // Hyprland's own workspace juggling around a monitor (un)plug
             // from corrupting `current` right before the re-weld re-applies
             // it (seen live: a redock silently reset desk 8 to desk 1):
@@ -300,7 +300,7 @@ impl Daemon {
         if desk == self.current {
             return Ok("ok (already there)".to_string());
         }
-        hypr::batch(&switch_commands(desk, &hypr::monitors()?))?;
+        hypr::eval(&switch_commands(desk, &hypr::monitors()?))?;
         self.record_switch(desk);
         Ok("ok".to_string())
     }
@@ -310,7 +310,7 @@ impl Daemon {
             return Ok("ok (no active window)".to_string());
         };
         let monitors = hypr::monitors()?;
-        hypr::batch(&move_commands(desk, mode, &monitors, &address))?;
+        hypr::eval(&move_commands(desk, mode, &monitors, &address))?;
         if mode == MoveMode::Follow && desk != self.current {
             self.record_switch(desk);
         }
@@ -349,17 +349,17 @@ impl Daemon {
                     let target = desk.workspace_on(0);
                     for client in clients.iter().filter(|c| c.workspace.id == workspace.id) {
                         self.displaced.insert(client.address.clone(), workspace.id);
-                        commands.push(format!(
-                            "dispatch movetoworkspacesilent {target},address:{}",
-                            client.address
-                        ));
+                        commands.push(Command::MoveWindowSilent {
+                            address: client.address.clone(),
+                            workspace: target,
+                        });
                     }
                 }
                 Some(owner) if workspace.monitor.as_deref() != Some(owner.name.as_str()) => {
-                    commands.push(format!(
-                        "dispatch moveworkspacetomonitor {} {}",
-                        workspace.id, owner.name
-                    ));
+                    commands.push(Command::MoveWorkspaceToMonitor {
+                        workspace: workspace.id,
+                        monitor: owner.name.clone(),
+                    });
                 }
                 Some(_) => {}
             }
@@ -371,7 +371,7 @@ impl Daemon {
             &clients,
         ));
         commands.extend(switch_commands(self.current, &monitors));
-        hypr::batch(&commands)?;
+        hypr::eval(&commands)?;
         self.welded_monitors = monitor_names(&monitors);
         self.notify_subscribers();
         Ok(())
@@ -403,25 +403,27 @@ fn desk_shown_everywhere(monitors: &[hypr::Monitor]) -> Option<DeskId> {
 /// for the target desk, staying on its own monitor (upstream parity).
 ///
 /// The window is pinned by address throughout: a dispatch that relies on
-/// "the active window" resolves it at execution time, mid-batch, where a
-/// preceding cross-monitor `workspace` dispatch has already moved focus -
-/// the unpinned form then moves whatever window focus landed on (seen
-/// live after a redock: the stale focus pointer moved the wrong window).
-/// A follow ends with an explicit `focuswindow` for the same reason.
+/// "the active window" resolves it at execution time, mid-chunk, where a
+/// preceding cross-monitor focus dispatch has already moved focus - the
+/// unpinned form then moves whatever window focus landed on (seen live
+/// after a redock: the stale focus pointer moved the wrong window). A
+/// follow ends with an explicit window focus for the same reason.
 fn move_commands(
     desk: DeskId,
     mode: MoveMode,
     monitors: &[hypr::Monitor],
     address: &str,
-) -> Vec<String> {
+) -> Vec<Command> {
     let focused_index = monitors.iter().position(|m| m.focused).unwrap_or(0);
-    let target = desk.workspace_on(focused_index);
-    let mut commands = vec![format!(
-        "dispatch movetoworkspacesilent {target},address:{address}"
-    )];
+    let mut commands = vec![Command::MoveWindowSilent {
+        address: address.to_string(),
+        workspace: desk.workspace_on(focused_index),
+    }];
     if mode == MoveMode::Follow {
         commands.extend(switch_commands(desk, monitors));
-        commands.push(format!("dispatch focuswindow address:{address}"));
+        commands.push(Command::FocusWindow {
+            address: address.to_string(),
+        });
     }
     commands
 }
@@ -436,7 +438,7 @@ fn restore_commands(
     displaced: &mut BTreeMap<String, i64>,
     monitor_count: usize,
     clients: &[hypr::Client],
-) -> Vec<String> {
+) -> Vec<Command> {
     let mut commands = Vec::new();
     displaced.retain(|address, home| {
         let (Some(desk), Some(slot)) = (DeskId::of_workspace(*home), monitor_index_of(*home))
@@ -450,9 +452,10 @@ fn restore_commands(
             client.address == *address && client.workspace.id == desk.workspace_on(0)
         });
         if still_where_evacuated {
-            commands.push(format!(
-                "dispatch movetoworkspacesilent {home},address:{address}"
-            ));
+            commands.push(Command::MoveWindowSilent {
+                address: address.clone(),
+                workspace: *home,
+            });
         }
         false
     });
@@ -475,11 +478,11 @@ fn occupied_desks() -> Result<Vec<DeskId>> {
 
 /// Commands bringing every monitor to `desk`. The focused monitor is
 /// switched last so focus ends where it started (upstream parity).
-fn switch_commands(desk: DeskId, monitors: &[hypr::Monitor]) -> Vec<String> {
+fn switch_commands(desk: DeskId, monitors: &[hypr::Monitor]) -> Vec<Command> {
     let mut commands = Vec::with_capacity(monitors.len());
     let mut focused_command = None;
     for (index, monitor) in monitors.iter().enumerate() {
-        let command = format!("dispatch workspace {}", desk.workspace_on(index));
+        let command = Command::FocusWorkspace(desk.workspace_on(index));
         if monitor.focused {
             focused_command = Some(command);
         } else {
@@ -490,22 +493,21 @@ fn switch_commands(desk: DeskId, monitors: &[hypr::Monitor]) -> Vec<String> {
     commands
 }
 
-/// Pin every desk workspace to its monitor with runtime `workspace`
-/// keywords, so plain workspace dispatches always land on the right
-/// monitor. Config reloads wipe runtime keywords, hence re-assertion on
-/// `configreloaded`.
+/// Pin every desk workspace to its monitor with eval-registered workspace
+/// rules, so plain workspace focus dispatches always land on the right
+/// monitor. Config reloads wipe eval-registered rules, hence re-assertion
+/// on `configreloaded`.
 fn assert_pinning_rules(monitors: &[hypr::Monitor]) -> Result<()> {
     let mut commands = Vec::new();
     for (index, monitor) in monitors.iter().enumerate() {
         for desk in DeskId::all() {
-            commands.push(format!(
-                "keyword workspace {}, monitor:{}",
-                desk.workspace_on(index),
-                monitor.name
-            ));
+            commands.push(Command::PinWorkspace {
+                workspace: desk.workspace_on(index),
+                monitor: monitor.name.clone(),
+            });
         }
     }
-    hypr::batch(&commands)
+    hypr::eval(&commands)
 }
 
 #[cfg(test)]
@@ -542,6 +544,13 @@ mod tests {
         DeskId::new(id).expect("valid desk id in test")
     }
 
+    fn move_silent(address: &str, workspace: i64) -> Command {
+        Command::MoveWindowSilent {
+            address: address.to_string(),
+            workspace,
+        }
+    }
+
     #[test]
     fn window_waits_while_its_home_monitor_is_missing() {
         // Home ws 12 lives on monitor slot 1; only one monitor is present.
@@ -556,10 +565,7 @@ mod tests {
         // Evacuation left it on ws 2 (desk 2's primary); slot 1 is back.
         let mut memory = displaced(&[("0xa", 12)]);
         let commands = restore_commands(&mut memory, 2, &[client("0xa", 2)]);
-        assert_eq!(
-            commands,
-            vec!["dispatch movetoworkspacesilent 12,address:0xa".to_string()]
-        );
+        assert_eq!(commands, vec![move_silent("0xa", 12)]);
         assert!(memory.is_empty());
     }
 
@@ -583,10 +589,12 @@ mod tests {
         assert_eq!(
             commands,
             vec![
-                "dispatch movetoworkspacesilent 15,address:0xa".to_string(),
-                "dispatch workspace 5".to_string(),
-                "dispatch workspace 15".to_string(),
-                "dispatch focuswindow address:0xa".to_string(),
+                move_silent("0xa", 15),
+                Command::FocusWorkspace(5),
+                Command::FocusWorkspace(15),
+                Command::FocusWindow {
+                    address: "0xa".to_string()
+                },
             ]
         );
     }
@@ -595,10 +603,7 @@ mod tests {
     fn silent_move_pins_the_window_and_switches_nothing() {
         let monitors = [monitor(0, "eDP-1", true, 1), monitor(1, "DP-2", false, 11)];
         let commands = move_commands(desk(5), MoveMode::Silent, &monitors, "0xa");
-        assert_eq!(
-            commands,
-            vec!["dispatch movetoworkspacesilent 5,address:0xa".to_string()]
-        );
+        assert_eq!(commands, vec![move_silent("0xa", 5)]);
     }
 
     #[test]
@@ -608,9 +613,11 @@ mod tests {
         assert_eq!(
             commands,
             vec![
-                "dispatch movetoworkspacesilent 3,address:0xb".to_string(),
-                "dispatch workspace 3".to_string(),
-                "dispatch focuswindow address:0xb".to_string(),
+                move_silent("0xb", 3),
+                Command::FocusWorkspace(3),
+                Command::FocusWindow {
+                    address: "0xb".to_string()
+                },
             ]
         );
     }
@@ -645,10 +652,7 @@ mod tests {
         let commands = restore_commands(&mut memory, 2, &[client("0xa", 2), client("0xb", 5)]);
         assert_eq!(
             commands,
-            vec![
-                "dispatch movetoworkspacesilent 12,address:0xa".to_string(),
-                "dispatch movetoworkspacesilent 15,address:0xb".to_string(),
-            ]
+            vec![move_silent("0xa", 12), move_silent("0xb", 15)]
         );
         assert!(memory.is_empty());
     }

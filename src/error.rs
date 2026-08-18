@@ -21,7 +21,7 @@ pub enum Error {
         query: String,
         source: serde_json::Error,
     },
-    /// Hyprland rejected a dispatched command or keyword.
+    /// Hyprland rejected an eval chunk (a dispatch or workspace rule).
     Rejected(String),
     /// A request line violated the client/daemon wire protocol.
     BadRequest(String),

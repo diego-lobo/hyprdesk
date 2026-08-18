@@ -1,6 +1,8 @@
 # DESIGN - hyprdesk
 
-Status: DECIDED 2026-07-26. Architecture B (IPC-based emulation) in Rust:
+Status: IMPLEMENTED and RUNNING. Decided 2026-07-26; ported to Omarchy 4
+"Quattro" / Hyprland 0.56.2 on 2026-08-18 (see the port section below).
+Architecture B (IPC-based emulation) in Rust:
 a resident daemon plus thin CLI client, single binary. Rationale: the plugin
 route (A) couples to internal C++ headers that drift every release - the
 exact failure class this project escapes - and a Rust in-process plugin
@@ -47,10 +49,13 @@ surface (extract exact semantics from `reference/` source, not memory):
 
 ### B. IPC-based emulation (RECOMMENDED)
 
-Drive Hyprland exclusively through its STABLE public surface: `hyprctl`
-dispatchers + `--batch`, workspace rules, and the socket2 event stream.
-No compositor internals, so Hyprland updates cannot break the build - the
-IPC surface is the compatibility contract.
+Drive Hyprland exclusively through its STABLE public surface: request
+socket actions, workspace rules, and the socket2 event stream. No
+compositor internals, so Hyprland updates cannot break the BUILD - the
+IPC surface is the compatibility contract. (Hyprland 0.56 did change the
+action GRAMMAR on that surface; see "Omarchy 4 / Hyprland 0.56 port"
+below. The port was a one-file change with no architectural impact,
+which is the trade the architecture was chosen to make.)
 
 Sketch:
 - **Mapping:** desk `d` = workspace `d` on monitor 1, workspace `d+10` on
@@ -79,6 +84,12 @@ Sketch:
   empty), 6-10 appear only while occupied, active desk is the stock dot
   glyph. Scroll on the module cycles desks; per-desk click targets are
   impossible in a single custom module (accepted).
+  SUPERSEDED 2026-08-18: Omarchy 4 has no waybar. The bar is now a
+  Quickshell plugin host and the desk strip is a user bar-widget,
+  `~/.config/omarchy/plugins/hyprdesk.desks/` (see the port section below).
+  The `waybar` subcommand and `src/waybar.rs` still work and are the
+  daemon's only push-notification surface, but nothing on this machine
+  consumes them.
 
 Known caveat to evaluate honestly: a batched multi-dispatch switch is not
 compositor-atomic; there may be a visible one-frame stagger between
@@ -144,13 +155,100 @@ plugin A does not have this issue).
 - **nextdesk/prevdesk:** bounded 1..=10; plain forms clamp, cycle forms
   wrap (upstream's unbounded desk creation does not fit a 10-key row).
 
+## Omarchy 4 / Hyprland 0.56 port (2026-08-18)
+
+Omarchy 4.0.0 "Quattro" (Hyprland 0.56.2) broke every integration point
+at once. The daemon's LOGIC survived untouched; only the two edges that
+speak to the outside world moved. Root causes, all verified live:
+
+1. **Hyprland's config engine is now Lua, and the legacy text grammar is
+   gone.** `keyword ...` on the request socket answers "keyword can't
+   work with non-legacy parsers. Use eval.", and `dispatch workspace 4`
+   is now parsed as the Lua expression `hl.dispatch(workspace 4)`, a
+   syntax error. This killed the daemon at startup, on its very first
+   action (asserting pinning rules). `[[BATCH]]` is likewise retired.
+   Replacement: a single `eval <lua-chunk>` request. Because one chunk is
+   one compositor-side execution with nothing interleaved, this is
+   TIGHTER than the old batch, which parsed each item separately.
+2. **Omarchy's Hyprland config moved from `.conf` to `.lua`.** The
+   migration left the old `~/.config/hypr/*.conf` files on disk but
+   Hyprland loads `hyprland.lua` and never reads them (confirmed in the
+   compositor log: "Using lua config found at .../hyprland.lua"), so
+   `hyprdesk.conf` was inert - no binds, no daemon autostart.
+3. **Waybar is gone.** The bar is a Quickshell plugin host
+   (`omarchy-shell`); its stock `omarchy.workspaces` widget filters to
+   workspace ids 1-10, so under hyprdesk the external monitor's desk
+   workspaces (11+) are invisible and NOTHING highlights whenever focus
+   sits on that monitor.
+
+### What changed
+
+- **`src/hypr.rs`:** `batch(&[String])` became `eval(&[Command])`, where
+  `Command` is a typed enum of the five compositor actions hyprdesk
+  needs, each rendering to one `hl.*` Lua statement. This removed the
+  last stringly-typed protocol surface in the crate - the old code built
+  dispatch strings by `format!` at four call sites, which is exactly the
+  construct that silently changed meaning under the new parser.
+  Compositor-supplied values (monitor names, window addresses) are
+  interpolated through `lua_quote`, so an odd name cannot be read as Lua.
+- **Everything else in the daemon:** unchanged apart from the builders
+  returning `Vec<Command>` instead of `Vec<String>`. Desk model, hotplug
+  re-weld, window memory, tracking guards, protocol: all untouched.
+- **`~/.config/hypr/hyprdesk.lua`** replaces `hyprdesk.conf`, required
+  from `hyprland.lua` after the Omarchy defaults. Same bindings as
+  before, expressed with `hl.unbind` + `o.bind` and a loop over the
+  number row instead of 30 hand-written lines. Full revert is still one
+  line plus one file.
+- **`~/.config/omarchy/plugins/hyprdesk.desks/`** replaces the waybar
+  module: a Quickshell bar widget rendering the same desk strip.
+
+### Verified action grammar (Hyprland 0.56.2)
+
+| Purpose | Lua statement |
+|---------|---------------|
+| switch a monitor's workspace | `hl.dispatch(hl.dsp.focus({ workspace = "15" }))` |
+| focus a window | `hl.dispatch(hl.dsp.focus({ window = "address:0x..." }))` |
+| move a window, no follow | `hl.dispatch(hl.dsp.window.move({ window = "address:0x...", workspace = "12", follow = false }))` |
+| move a workspace to a monitor | `hl.dispatch(hl.dsp.workspace.move({ workspace = "12", monitor = "HDMI-A-1" }))` |
+| pin a workspace to a monitor | `hl.workspace_rule({ workspace = 21, monitor = "eDP-1" })` |
+
+Properties confirmed by probing the live compositor, all of which the
+daemon depends on:
+
+- `eval` accepts a multi-statement chunk; a raising statement aborts the
+  rest and the reply carries the error text instead of `ok`, which keeps
+  `eval`'s failure semantics identical to the old batch's.
+- Re-registering `hl.workspace_rule` for a workspace REPLACES its rule
+  (no duplicate accumulation across re-welds).
+- A config reload WIPES eval-registered workspace rules, so the existing
+  `configreloaded` re-assertion is still required. Verified still working
+  after the port: 20 rules restored post-reload.
+- `hyprctl binds` reports keycode binds with `key: ""` and `keycode: 0`
+  for Lua-registered and stock binds alike, so it cannot be used to check
+  which physical key a bind sits on. Match on `description` instead.
+
+### Bar widget design
+
+The widget derives the desk strip PURELY from compositor state that
+Quickshell already tracks reactively (`Hyprland.workspaces`,
+`Hyprland.focusedWorkspace`), applying the same `((id - 1) % 10) + 1`
+mapping as `src/model.rs`. It does not read the daemon's socket; the
+daemon is invoked only to ACT on a click or scroll. Rationale: the bar
+stays correct across daemon restarts, needs no stream plumbing, and
+cannot drift into a state the compositor disagrees with. Visuals mirror
+the previous waybar strip (persistent 1-5, higher desks only while
+occupied, stock dot glyph for active, desk 10 labelled "0"). Bonus over
+waybar: per-desk click targets are now possible, which the single custom
+module could not do.
+
 ## Keybind plan (agreed with Diego during investigation)
 
-All overrides go in ONE new sourced file (e.g.
-`~/.config/hypr/hyprdesk.conf`, one `source =` line added to
-`~/.config/hypr/hyprland.conf`; full revert = delete file + line). Omarchy
-defaults load first, so each override needs `unbind` before `bindd`.
-Number row is KEYCODE-based: `code:10`..`code:19` = 1..0.
+All overrides go in ONE new file (`~/.config/hypr/hyprdesk.lua`, one
+`require("hypr.hyprdesk")` line added to `~/.config/hypr/hyprland.lua`;
+full revert = delete file + line). Omarchy defaults load first, so each
+override needs `hl.unbind` before `o.bind`. Number row is KEYCODE-based:
+`code:10`..`code:19` = 1..0. (Pre-Quattro this was `hyprdesk.conf`
+sourced from `hyprland.conf`, with `unbind`/`bindd`.)
 
 | Keys                    | Now (Omarchy stock)        | Becomes            |
 |-------------------------|----------------------------|--------------------|
@@ -166,13 +264,24 @@ Untouched: SUPER+S scratchpad, SUPER+ALT+S move-to-scratchpad, ALT+TAB
 window cycling, CTRL+ALT+TAB focusmonitor, SUPER+ALT+1..5 group switching.
 SUPER+SHIFT+ALT+arrows: decide in sub-decisions above.
 
-## Next steps (for the implementation session)
+## Integration points (what to re-check after an Omarchy/Hyprland update)
 
-1. Read `reference/` source for exact upstream semantics (especially
-   moveToDesk focus handling and hotplug re-weld logic).
-2. Settle the A-vs-B pick and the B sub-decisions on the merits.
-3. Decide, record the decision here (flip Status off DRAFT), scaffold the
-   implementation (cargo init or scripts/), build, then wire keybinds last -
-   config changes only after the tool works from the command line.
-4. Validate every config step with `hyprctl reload` + `hyprctl configerrors`;
-   Diego eyeballs the visual result (no headless screenshots).
+The daemon's own logic has never broken on an update; the edges have.
+When something stops working, check these four in order:
+
+1. **Action grammar.** Does `hyprctl eval 'hl.dispatch(hl.dsp.focus({
+   workspace = "1" }))'` still answer `ok`? The table above is the full
+   set hyprdesk uses. Introspect the live API with
+   `hyprctl eval` writing `pairs(hl)` to a file - `eval` does not echo
+   return values, so dump to a file to read it.
+2. **Config entry point.** Which file does the compositor actually load?
+   `grep -i "using .* config" $XDG_RUNTIME_DIR/hypr/$HYPRLAND_INSTANCE_SIGNATURE/hyprland.log`.
+   Our hook must be required from it.
+3. **Binds.** `hyprctl binds -j`, matched on `description` (see above -
+   the keycode fields are not populated). Expect 35 hyprdesk binds.
+4. **Bar.** Whatever renders the desk strip; currently the Quickshell
+   widget. `omarchy plugin list` should show `hyprdesk.desks` enabled, and
+   `journalctl --user` carries its QML errors.
+
+Validate config changes with `hyprctl reload` + `hyprctl configerrors`;
+Diego eyeballs the visual result (no headless screenshots).

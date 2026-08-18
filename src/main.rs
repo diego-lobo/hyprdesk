@@ -32,7 +32,9 @@ USAGE:
   hyprdesk lastdesk              back-and-forth to the previous desk
   hyprdesk status [--json]       show current/last desk
   hyprdesk subscribe             stream desk changes (one id per line)
-  hyprdesk waybar                stream waybar custom-module JSON";
+  hyprdesk waybar                stream waybar custom-module JSON
+                                 (no consumer since Omarchy 4 dropped waybar;
+                                 the bar widget derives its own state)";
 
 /// What the command line asks of this process.
 enum Invocation {
