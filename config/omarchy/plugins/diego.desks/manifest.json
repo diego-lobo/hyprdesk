@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "diego.desks",
+  "name": "Desks",
+  "version": "1.0.0",
+  "author": "diego",
+  "description": "hyprdesk shared-monitor desk switcher",
+  "kinds": [
+    "bar-widget"
+  ],
+  "entryPoints": {
+    "barWidget": "BarWidget.qml"
+  },
+  "barWidget": {
+    "displayName": "Desks",
+    "description": "hyprdesk desk indicators, spanning all monitors",
+    "category": "Compositor",
+    "allowMultiple": false
+  }
+}

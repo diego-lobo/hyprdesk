@@ -1,5 +1,11 @@
 //! Rendering for waybar's `custom/hyprdesk` module.
 //!
+//! Vestigial since Omarchy 4 replaced waybar with a Quickshell bar: the
+//! desk strip is now drawn by `~/.config/omarchy/plugins/diego.desks/`,
+//! which derives the same view from compositor state and never reads
+//! this stream. Kept because it still works and is the daemon's only
+//! push-notification surface for any future bar.
+//!
 //! The daemon streams one JSON object per line to `hyprdesk waybar`
 //! subscribers; waybar consumes it as a continuous custom module
 //! (`return-type: json`). The strip mirrors Omarchy's stock workspace

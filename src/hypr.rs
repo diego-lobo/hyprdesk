@@ -4,11 +4,12 @@
 //! exclusively over Hyprland's stable public sockets, never its internal
 //! API - that boundary is the reason hyprdesk survives compositor updates.
 //!
-//! Protocol, verified against Hyprland 0.55.4: connect to `.socket.sock`,
+//! Protocol, verified against Hyprland 0.56.2: connect to `.socket.sock`,
 //! write one request, read the reply to EOF. Queries are `j/<name>` and
-//! answer JSON; dispatches are `dispatch <cmd>` and answer `ok`; batches
-//! are `[[BATCH]]a ; b` and answer with the individual replies joined by
-//! `\n\n\n`. `.socket2.sock` streams `event>>data` lines.
+//! answer JSON; actions are `eval <lua>` chunks answering `ok` (0.56's
+//! Lua config engine retired the legacy text grammar: `keyword` answers
+//! "can't work with non-legacy parsers" and `dispatch` arguments are now
+//! parsed as Lua). `.socket2.sock` streams `event>>data` lines.
 
 use crate::error::{Error, Result};
 use serde::Deserialize;
@@ -54,22 +55,85 @@ pub fn query<T: serde::de::DeserializeOwned>(what: &str) -> Result<T> {
     })
 }
 
-/// Run dispatches/keywords as one batch, failing on the first item
-/// Hyprland rejects. A batch is processed back-to-back by the compositor;
-/// this is as close to an atomic multi-monitor operation as the IPC
-/// surface offers.
-pub fn batch(commands: &[String]) -> Result<()> {
+/// One compositor-side action, in the vocabulary hyprdesk needs. Rendered
+/// as an `hl.*` Lua statement and executed through the `eval` request -
+/// the only action surface Hyprland 0.56's Lua config engine accepts.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Command {
+    /// Bring a workspace to its pinned monitor and focus it.
+    FocusWorkspace(i64),
+    /// Focus a window by compositor address.
+    FocusWindow { address: String },
+    /// Move a window to a workspace without following it. A vanished
+    /// address is a silent no-op, which restore passes rely on.
+    MoveWindowSilent { address: String, workspace: i64 },
+    /// Move a whole workspace onto a monitor.
+    MoveWorkspaceToMonitor { workspace: i64, monitor: String },
+    /// Register this workspace's monitor pinning rule. Re-registering a
+    /// workspace replaces its previous rule; a config reload wipes all
+    /// eval-registered rules (both verified on 0.56.2).
+    PinWorkspace { workspace: i64, monitor: String },
+}
+
+impl Command {
+    /// Render as one Lua statement for the compositor's config engine.
+    fn to_lua(&self) -> String {
+        match self {
+            Self::FocusWorkspace(workspace) => {
+                format!("hl.dispatch(hl.dsp.focus({{ workspace = \"{workspace}\" }}))")
+            }
+            Self::FocusWindow { address } => format!(
+                "hl.dispatch(hl.dsp.focus({{ window = {} }}))",
+                lua_quote(&format!("address:{address}"))
+            ),
+            Self::MoveWindowSilent { address, workspace } => format!(
+                "hl.dispatch(hl.dsp.window.move({{ window = {}, workspace = \"{workspace}\", follow = false }}))",
+                lua_quote(&format!("address:{address}"))
+            ),
+            Self::MoveWorkspaceToMonitor { workspace, monitor } => format!(
+                "hl.dispatch(hl.dsp.workspace.move({{ workspace = \"{workspace}\", monitor = {} }}))",
+                lua_quote(monitor)
+            ),
+            Self::PinWorkspace { workspace, monitor } => format!(
+                "hl.workspace_rule({{ workspace = {workspace}, monitor = {} }})",
+                lua_quote(monitor)
+            ),
+        }
+    }
+}
+
+/// A Lua double-quoted string literal. Compositor-sourced values (monitor
+/// names, window addresses) are interpolated into eval chunks; quoting
+/// keeps an odd name from being read as Lua syntax.
+fn lua_quote(value: &str) -> String {
+    let mut quoted = String::with_capacity(value.len() + 2);
+    quoted.push('"');
+    for c in value.chars() {
+        match c {
+            '\\' => quoted.push_str("\\\\"),
+            '"' => quoted.push_str("\\\""),
+            '\n' => quoted.push_str("\\n"),
+            _ => quoted.push(c),
+        }
+    }
+    quoted.push('"');
+    quoted
+}
+
+/// Execute commands as one Lua chunk in a single `eval` request. The
+/// whole chunk runs inside the compositor with no other input
+/// interleaved, tighter than the retired `[[BATCH]]`, which parsed each
+/// item separately. A failing statement raises, aborting the rest of the
+/// chunk; the reply is then the failure text instead of `ok`.
+pub fn eval(commands: &[Command]) -> Result<()> {
     if commands.is_empty() {
         return Ok(());
     }
-    let reply = request(&format!("[[BATCH]]{}", commands.join(" ; ")))?;
-    match reply
-        .split("\n\n\n")
-        .map(str::trim)
-        .find(|part| !part.is_empty() && *part != "ok")
-    {
-        Some(rejection) => Err(Error::Rejected(rejection.to_string())),
-        None => Ok(()),
+    let statements: Vec<String> = commands.iter().map(Command::to_lua).collect();
+    let reply = request(&format!("eval {}", statements.join("; ")))?;
+    match reply.trim() {
+        "ok" => Ok(()),
+        rejection => Err(Error::Rejected(rejection.to_string())),
     }
 }
 
@@ -158,4 +222,56 @@ pub fn event_stream() -> Result<impl Iterator<Item = std::io::Result<Event>>> {
     Ok(BufReader::new(stream)
         .lines()
         .map(|line| line.map(|l| parse_event(&l))))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn commands_render_to_the_verified_lua_forms() {
+        assert_eq!(
+            Command::FocusWorkspace(15).to_lua(),
+            "hl.dispatch(hl.dsp.focus({ workspace = \"15\" }))"
+        );
+        assert_eq!(
+            Command::FocusWindow {
+                address: "0xa".to_string()
+            }
+            .to_lua(),
+            "hl.dispatch(hl.dsp.focus({ window = \"address:0xa\" }))"
+        );
+        assert_eq!(
+            Command::MoveWindowSilent {
+                address: "0xa".to_string(),
+                workspace: 12
+            }
+            .to_lua(),
+            "hl.dispatch(hl.dsp.window.move({ window = \"address:0xa\", \
+             workspace = \"12\", follow = false }))"
+        );
+        assert_eq!(
+            Command::MoveWorkspaceToMonitor {
+                workspace: 12,
+                monitor: "HDMI-A-1".to_string()
+            }
+            .to_lua(),
+            "hl.dispatch(hl.dsp.workspace.move({ workspace = \"12\", monitor = \"HDMI-A-1\" }))"
+        );
+        assert_eq!(
+            Command::PinWorkspace {
+                workspace: 21,
+                monitor: "eDP-1".to_string()
+            }
+            .to_lua(),
+            "hl.workspace_rule({ workspace = 21, monitor = \"eDP-1\" })"
+        );
+    }
+
+    #[test]
+    fn lua_quote_escapes_metacharacters() {
+        assert_eq!(lua_quote("plain"), "\"plain\"");
+        assert_eq!(lua_quote("a\"b\\c"), "\"a\\\"b\\\\c\"");
+        assert_eq!(lua_quote("a\nb"), "\"a\\nb\"");
+    }
 }

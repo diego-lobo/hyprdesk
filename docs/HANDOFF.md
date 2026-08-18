@@ -1,5 +1,10 @@
 # HANDOFF - why hyprdesk exists (2026-07-26)
 
+> Historical. Every version number below is pre-Quattro (Hyprland 0.55.4,
+> Omarchy 3). The reasoning still stands - it is why the project exists -
+> but for current system facts see `CLAUDE.md`, and for the Omarchy 4 /
+> Hyprland 0.56 port see `docs/DESIGN.md`.
+
 Diego wants macOS/Windows/KDE-style shared-monitor desktops on Omarchy:
 every desk spans ALL monitors; eDP-1 and DP-2 switch together. The upstream
 plugin `levnikmyskin/hyprland-virtual-desktops` does exactly this, but every

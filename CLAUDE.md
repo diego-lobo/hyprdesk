@@ -5,9 +5,10 @@ Read `docs/DESIGN.md` and `docs/HANDOFF.md` before doing anything.
 
 ## Hard constraints
 
-- **NEVER modify anything in `~/.local/share/omarchy/`** (reading is fine and
-  encouraged). It is git-managed by Omarchy; edits are lost on update and
-  break the updater. All customization goes in `~/.config/`.
+- **NEVER modify anything in `/usr/share/omarchy/`** (reading is fine and
+  encouraged). It is owned by the `omarchy` package; edits are lost on
+  update. All customization goes in `~/.config/`. (Pre-Quattro this tree
+  lived at `~/.local/share/omarchy/`; a stale copy may still be there.)
 - **DO NOT touch any files inside `~/Projects/kriegsspiel`.** Unrelated
   project.
 - **No sudo-dependent install or runtime paths.** The entire reason this
@@ -30,26 +31,47 @@ Read `docs/DESIGN.md` and `docs/HANDOFF.md` before doing anything.
 - Commits: no trailers/footers ever (no Claude Code footer, no
   Co-Authored-By).
 
-## System facts (verified 2026-07-26)
+## System facts (verified 2026-08-18, after the Omarchy 4 upgrade)
 
-- Omarchy on Arch, Hyprland **0.55.4** (pacman `hyprland 0.55.4-1`, release
-  tag commit `a0136d8c04687bb36eb8a28eb9d1ff92aea99704`).
-- Arch's hyprland package ships full plugin dev headers
-  (`/usr/include/hyprland/`, 526 files); `pkg-config --modversion hyprland`
-  works. Plugins CAN be built against system headers with zero
-  hyprpm/sudo involvement; pacman keeps headers in step with the compositor.
-- Monitors: `eDP-1` (laptop) + `DP-2` (external). Treat monitor set as
-  dynamic (hotplug) - never hardcode.
-- Omarchy binds the number row by KEYCODE (`code:10`..`code:19`), with
-  `bindd` (description field). Defaults load from
-  `~/.local/share/omarchy/default/hypr/bindings/tiling-v2.conf` BEFORE
-  `~/.config/hypr/bindings.conf`, so overriding a default bind requires an
-  `unbind` line first.
-- User Hyprland config entry point: `~/.config/hypr/hyprland.conf`; our
-  additions should live in a single new sourced file (one-line revert).
+- Omarchy **4.0.0 "Quattro"** on Arch, Hyprland **0.56.2** (pacman
+  `omarchy 4.0.0-1`, `hyprland 0.56.2-1`, tag commit `efb50993`).
+- Omarchy now installs to **`/usr/share/omarchy/`** (package-owned,
+  READ-ONLY, reading encouraged), not `~/.local/share/omarchy/`.
+- Hyprland's config engine is **Lua**. The legacy text grammar is gone:
+  `keyword` is rejected outright ("Use eval.") and `dispatch` args parse
+  as Lua. Drive the compositor with `eval <lua chunk>`; `[[BATCH]]` is
+  retired. `hyprdesk` speaks this through the typed `hypr::Command` enum
+  - see the verified grammar table in `docs/DESIGN.md`.
+- User Hyprland config entry point: **`~/.config/hypr/hyprland.lua`**
+  (confirmed in the compositor log). The old `~/.config/hypr/*.conf`
+  files survive on disk from the migration but are NEVER read - do not be
+  fooled by them. Ours lives in `~/.config/hypr/hyprdesk.lua`, required
+  from `hyprland.lua` (one-line revert).
+- Overriding a default bind still needs an unbind first, now
+  `hl.unbind("SUPER + code:10")` before `o.bind(...)`; defaults come from
+  `/usr/share/omarchy/default/hypr/bindings/tiling.lua`. The number row
+  is still KEYCODE-based (`code:10`..`code:19` = 1..0). Note
+  `hyprctl binds` does NOT populate the key/keycode fields for these -
+  match on `description`.
+- **Waybar is gone.** The bar is Quickshell (`omarchy-shell`) with plugin
+  widgets; user plugins live in `~/.config/omarchy/plugins/<id>/`. Ours is
+  `diego.desks`. QML errors land in `journalctl --user`.
+- Arch's hyprland package still ships plugin dev headers
+  (`/usr/include/hyprland/`) and `pkg-config --modversion hyprland` works,
+  so the plugin route remains technically open; the 0.55.4-era
+  `virtual-desktops.so` in `reference/` has NOT been revalidated on 0.56.
+- Monitors on this machine are currently `eDP-1` (laptop) + `HDMI-A-1`
+  (external; it was `DP-2` before). Treat the monitor set as dynamic
+  (hotplug) - never hardcode.
 - `sudo` prompts for a password and Claude's shell has no TTY; anything
   needing sudo must be handed to Diego to run in a real terminal (suggest the
   `! command` prefix).
+
+## System integration is symlinked from `config/`
+
+`~/.config/hypr/hyprdesk.lua` and `~/.config/omarchy/plugins/diego.desks`
+are SYMLINKS into this repo's `config/` tree. Edit the repo copies; never
+replace a symlink with a regular file.
 
 ## Decision policy
 
