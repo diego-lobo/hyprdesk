@@ -5,3 +5,7 @@ reference/
 build/
 target/
 *.so
+
+# Local agent/editor state
+.claude/
+*.hyprdesk-backup.*

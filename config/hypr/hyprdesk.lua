@@ -1,4 +1,5 @@
--- hyprdesk - shared-monitor virtual desktops (~/Projects/hyprdesk)
+-- hyprdesk - shared-monitor virtual desktops
+-- https://github.com/diego-lobo/hyprdesk
 --
 -- Replaces Omarchy's stock per-monitor workspace bindings with desk
 -- bindings: a desk spans ALL monitors and switches them together.
@@ -9,7 +10,31 @@
 -- Untouched on purpose: SUPER+S scratchpad, ALT+TAB window cycling,
 -- CTRL+ALT+TAB monitor focus, SUPER+ALT+scroll group cycling.
 
-local hyprdesk = os.getenv("HOME") .. "/.cargo/bin/hyprdesk"
+-- Resolve the binary at config-load time. Hyprland execs inherit the
+-- session environment, whose PATH may be narrower than an interactive
+-- shell's, so the standard no-sudo install locations are probed directly
+-- and a bare name (PATH lookup) is the last resort.
+local function resolve_hyprdesk()
+  local home = os.getenv("HOME") or ""
+  local candidates = {
+    home .. "/.local/bin/hyprdesk",
+    home .. "/.cargo/bin/hyprdesk",
+    "/usr/local/bin/hyprdesk",
+    "/usr/bin/hyprdesk",
+  }
+
+  for _, path in ipairs(candidates) do
+    local file = io.open(path, "r")
+    if file then
+      file:close()
+      return path
+    end
+  end
+
+  return "hyprdesk"
+end
+
+local hyprdesk = resolve_hyprdesk()
 
 local function run(subcommand)
   return hyprdesk .. " " .. subcommand

@@ -1,10 +1,10 @@
 //! Rendering for waybar's `custom/hyprdesk` module.
 //!
-//! Vestigial since Omarchy 4 replaced waybar with a Quickshell bar: the
-//! desk strip is now drawn by `~/.config/omarchy/plugins/diego.desks/`,
-//! which derives the same view from compositor state and never reads
-//! this stream. Kept because it still works and is the daemon's only
-//! push-notification surface for any future bar.
+//! This is the bar path for plain-Hyprland setups. Omarchy 4 replaced
+//! waybar with a Quickshell bar, so there the desk strip is drawn by
+//! `config/omarchy/plugins/hyprdesk.desks/`, which derives the same view
+//! from compositor state and never reads this stream. Both renderings
+//! deliberately agree on the visual rules below.
 //!
 //! The daemon streams one JSON object per line to `hyprdesk waybar`
 //! subscribers; waybar consumes it as a continuous custom module

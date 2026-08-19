@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "id": "diego.desks",
+  "id": "hyprdesk.desks",
   "name": "Desks",
   "version": "1.0.0",
-  "author": "diego",
-  "description": "hyprdesk shared-monitor desk switcher",
+  "author": "hyprdesk",
+  "description": "Shared-monitor desk switcher for hyprdesk",
   "kinds": [
     "bar-widget"
   ],

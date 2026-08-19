@@ -1,4 +1,4 @@
-// hyprdesk desk switcher (~/Projects/hyprdesk).
+// hyprdesk desk switcher - https://github.com/diego-lobo/hyprdesk
 //
 // Replaces omarchy.workspaces while hyprdesk is running. A desk spans
 // every monitor, so the stock widget cannot represent it: it filters to
@@ -20,7 +20,7 @@ import qs.Ui
 
 BarWidget {
   id: root
-  moduleName: "diego.desks"
+  moduleName: "hyprdesk.desks"
 
   // Mirrors hyprdesk's desk model (src/model.rs): desk d on the monitor
   // in slot m owns Hyprland workspace d + deskCount*m, so a workspace's
@@ -35,7 +35,9 @@ BarWidget {
   // The glyph the stock bar uses for the active workspace (U+F14FB).
   readonly property string activeIcon: "󱓻"
 
-  readonly property string hyprdesk: (Quickshell.env("HOME") || "") + "/.cargo/bin/hyprdesk"
+  // Resolved from PATH: bar.run executes through a login shell, so any
+  // standard install location (~/.local/bin, ~/.cargo/bin) is found.
+  readonly property string hyprdesk: "hyprdesk"
 
   function deskOf(workspaceId) {
     if (workspaceId < 1 || workspaceId > root.deskCount * root.maxMonitors) return 0
