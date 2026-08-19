@@ -207,7 +207,7 @@ impl Daemon {
                 Some(desk) => self.switch_to(desk),
                 None => Ok("ok (no last desk yet)".to_string()),
             },
-            Request::Status(format) => Ok(self.status(format)),
+            Request::Status(format) => Ok(render_status(self.current, self.last, format)),
             // Subscriptions are intercepted by the acceptor thread;
             // reaching here is a daemon bug, not a client error.
             Request::Subscribe(_) => Err(Error::BadRequest(request.to_string())),
@@ -244,22 +244,6 @@ impl Daemon {
                 Ok(())
             }
             hypr::Event::Other => Ok(()),
-        }
-    }
-
-    fn status(&self, format: StatusFormat) -> String {
-        let last = self.last.map(|desk| desk.to_string());
-        match format {
-            StatusFormat::Text => format!(
-                "desk: {}\nlast: {}",
-                self.current,
-                last.unwrap_or_else(|| "none".to_string())
-            ),
-            StatusFormat::Json => format!(
-                "{{\"desk\":{},\"last\":{}}}",
-                self.current,
-                last.unwrap_or_else(|| "null".to_string())
-            ),
         }
     }
 
@@ -375,6 +359,23 @@ impl Daemon {
         self.welded_monitors = monitor_names(&monitors);
         self.notify_subscribers();
         Ok(())
+    }
+}
+
+/// Render a status reply. Single-line in both formats: the control
+/// protocol is one reply line per request, and a client reading a second
+/// line would block. An embedded newline here silently truncated the
+/// `last` field for every text-format caller.
+fn render_status(current: DeskId, last: Option<DeskId>, format: StatusFormat) -> String {
+    match format {
+        StatusFormat::Text => {
+            let last = last.map_or_else(|| "none".to_string(), |desk| desk.to_string());
+            format!("desk: {current}, last: {last}")
+        }
+        StatusFormat::Json => {
+            let last = last.map_or_else(|| "null".to_string(), |desk| desk.to_string());
+            format!("{{\"desk\":{current},\"last\":{last}}}")
+        }
     }
 }
 
@@ -549,6 +550,38 @@ mod tests {
             address: address.to_string(),
             workspace,
         }
+    }
+
+    #[test]
+    fn status_replies_fit_on_one_line_in_both_formats() {
+        // One reply line per request is the control-protocol invariant;
+        // a second line would be left unread in the client's socket.
+        for format in [StatusFormat::Text, StatusFormat::Json] {
+            for last in [None, Some(desk(1))] {
+                let reply = render_status(desk(5), last, format);
+                assert!(!reply.contains('\n'), "multi-line reply: {reply}");
+            }
+        }
+    }
+
+    #[test]
+    fn status_reports_the_current_and_last_desk() {
+        assert_eq!(
+            render_status(desk(5), Some(desk(2)), StatusFormat::Text),
+            "desk: 5, last: 2"
+        );
+        assert_eq!(
+            render_status(desk(5), None, StatusFormat::Text),
+            "desk: 5, last: none"
+        );
+        assert_eq!(
+            render_status(desk(5), Some(desk(2)), StatusFormat::Json),
+            r#"{"desk":5,"last":2}"#
+        );
+        assert_eq!(
+            render_status(desk(5), None, StatusFormat::Json),
+            r#"{"desk":5,"last":null}"#
+        );
     }
 
     #[test]

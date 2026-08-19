@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Question or general discussion
+    url: https://github.com/diego-lobo/hyprdesk/discussions
+    about: Ask how something works, or share your setup.
+  - name: Hyprland itself is misbehaving
+    url: https://github.com/hyprwm/Hyprland/issues
+    about: For compositor bugs unrelated to desks.
+  - name: Omarchy bar or shell problem
+    url: https://github.com/basecamp/omarchy/issues
+    about: For issues with the Omarchy shell that are not the Desks widget.

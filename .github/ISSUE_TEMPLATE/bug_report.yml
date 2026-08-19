@@ -1,0 +1,77 @@
+name: Bug report
+description: Something does not work the way it should
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. The environment questions below are not
+        bureaucracy: almost every hyprdesk bug so far has come down to a
+        specific Hyprland version or monitor layout.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened
+      description: What did you expect, and what did you get instead?
+      placeholder: I pressed SUPER+2 and only the laptop switched.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Dock the laptop
+        2. Press SUPER+3
+        3. ...
+    validations:
+      required: true
+
+  - type: input
+    id: hyprland
+    attributes:
+      label: Hyprland version
+      description: "Output of: hyprctl version | head -1"
+      placeholder: Hyprland 0.56.2 built from branch v0.56.2 ...
+    validations:
+      required: true
+
+  - type: dropdown
+    id: distro
+    attributes:
+      label: Setup
+      options:
+        - Omarchy
+        - Plain Hyprland
+        - Other
+    validations:
+      required: true
+
+  - type: textarea
+    id: monitors
+    attributes:
+      label: Monitor layout
+      description: "Output of: hyprctl monitors -j | jq '[.[] | {name, id, disabled}]'"
+      render: json
+    validations:
+      required: true
+
+  - type: input
+    id: status
+    attributes:
+      label: Daemon status
+      description: "Output of: hyprdesk status"
+      placeholder: "desk: 4, last: 1   (or the error it printed)"
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Daemon output and config errors
+      description: |
+        Anything the daemon printed, plus `hyprctl configerrors`.
+        On Omarchy, bar widget errors land in `journalctl --user`.
+      render: shell

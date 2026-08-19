@@ -1,0 +1,27 @@
+name: Feature request
+description: Suggest something hyprdesk should do
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: Describe the situation, not the solution. It often has an answer nobody expected.
+    validations:
+      required: true
+
+  - type: textarea
+    id: idea
+    attributes:
+      label: What would you like hyprdesk to do?
+    validations:
+      required: true
+
+  - type: textarea
+    id: upstream
+    attributes:
+      label: Does the upstream plugin do this?
+      description: |
+        hyprdesk emulates [hyprland-virtual-desktops](https://github.com/levnikmyskin/hyprland-virtual-desktops).
+        If it already has this behavior, say so, since matching it is usually the right call.
+        Known gaps: sticky apps, desk names, same-desk re-press swapping workspaces.

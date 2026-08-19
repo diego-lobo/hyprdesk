@@ -4,7 +4,7 @@
   "name": "Desks",
   "version": "1.0.0",
   "author": "hyprdesk",
-  "description": "hyprdesk shared-monitor desk switcher",
+  "description": "Shared-monitor desk switcher for hyprdesk",
   "kinds": [
     "bar-widget"
   ],

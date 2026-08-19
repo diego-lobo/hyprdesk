@@ -37,8 +37,8 @@ surface (extract exact semantics from `reference/` source, not memory):
 ### A. C++ Hyprland plugin (fork of / from-scratch like upstream)
 
 - We PROVED the toolchain works: commit `70a1ae6c` builds against system
-  headers, no sudo (see HANDOFF). A fork would build the same way, loaded
-  via a `plugin = ~/...so` config line.
+  headers, no sudo (see `docs/BACKGROUND.md`). A fork would build the same
+  way, loaded via a `plugin = /path/to/virtual-desktops.so` config line.
 - Cost: couples to Hyprland's INTERNAL headers, which drift every release
   (the v0.55.4-pin commit already needs a different include layout than the
   v0.55.3-pin commit). Every `pacman -Syu` that bumps Hyprland risks a
@@ -84,12 +84,12 @@ Sketch:
   empty), 6-10 appear only while occupied, active desk is the stock dot
   glyph. Scroll on the module cycles desks; per-desk click targets are
   impossible in a single custom module (accepted).
-  SUPERSEDED 2026-08-18: Omarchy 4 has no waybar. The bar is now a
-  Quickshell plugin host and the desk strip is a user bar-widget,
-  `~/.config/omarchy/plugins/hyprdesk.desks/` (see the port section below).
-  The `waybar` subcommand and `src/waybar.rs` still work and are the
-  daemon's only push-notification surface, but nothing on this machine
-  consumes them.
+  SUPERSEDED on Omarchy 2026-08-18: Omarchy 4 has no waybar. Its bar is
+  now a Quickshell plugin host and the desk strip is a user bar-widget,
+  `~/.config/omarchy/plugins/hyprdesk.desks/` (see the port section
+  below). The `waybar` subcommand and `src/waybar.rs` remain the supported
+  path for plain-Hyprland setups that still run waybar, and are the
+  daemon's only push-notification surface.
 
 Known caveat to evaluate honestly: a batched multi-dispatch switch is not
 compositor-atomic; there may be a visible one-frame stagger between
@@ -200,7 +200,8 @@ speak to the outside world moved. Root causes, all verified live:
   number row instead of 30 hand-written lines. Full revert is still one
   line plus one file.
 - **`~/.config/omarchy/plugins/hyprdesk.desks/`** replaces the waybar
-  module: a Quickshell bar widget rendering the same desk strip.
+  module on Omarchy: a Quickshell bar widget rendering the same desk
+  strip.
 
 ### Verified action grammar (Hyprland 0.56.2)
 
@@ -241,7 +242,7 @@ occupied, stock dot glyph for active, desk 10 labelled "0"). Bonus over
 waybar: per-desk click targets are now possible, which the single custom
 module could not do.
 
-## Keybind plan (agreed with Diego during investigation)
+## Keybind plan
 
 All overrides go in ONE new file (`~/.config/hypr/hyprdesk.lua`, one
 `require("hypr.hyprdesk")` line added to `~/.config/hypr/hyprland.lua`;
@@ -279,9 +280,10 @@ When something stops working, check these four in order:
    Our hook must be required from it.
 3. **Binds.** `hyprctl binds -j`, matched on `description` (see above -
    the keycode fields are not populated). Expect 35 hyprdesk binds.
-4. **Bar.** Whatever renders the desk strip; currently the Quickshell
-   widget. `omarchy plugin list` should show `hyprdesk.desks` enabled, and
-   `journalctl --user` carries its QML errors.
+4. **Bar.** Whatever renders the desk strip. On Omarchy,
+   `omarchy plugin list` should show `hyprdesk.desks` enabled, and
+   `journalctl --user` carries its QML errors. On waybar, check that
+   `hyprdesk waybar` still streams.
 
-Validate config changes with `hyprctl reload` + `hyprctl configerrors`;
-Diego eyeballs the visual result (no headless screenshots).
+Validate config changes with `hyprctl reload` + `hyprctl configerrors`.
+A human eyeballs the visual result; no headless screenshots.
