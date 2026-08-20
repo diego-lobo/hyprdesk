@@ -58,5 +58,5 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Lint the install scripts
-        run: shellcheck scripts/*.sh
+      - name: Lint the shell scripts
+        run: shellcheck scripts/*.sh assets/*.sh
