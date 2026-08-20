@@ -2,7 +2,7 @@
 
 # hyprdesk
 
-**Virtual desktops for Hyprland that behave exactly like workspaces.**
+**Virtual desktops for Hyprland that behave like workspaces.**
 
 One keypress switches every screen together, like macOS Spaces and
 Windows virtual desktops.
@@ -17,11 +17,44 @@ Windows virtual desktops.
 
 </div>
 
+## What hyprdesk does
+
+hyprdesk converts all existing/connected monitors into a single **desk**.
+
+This provides the best of both worlds: **the multi-workspace tiling of Hyprland + the simple desktop behavior of Windows/macOS**
+
+```mermaid
+flowchart LR
+    subgraph s1["SUPER+1"]
+        direction LR
+        s1a["External Monitor<br/>desk 1"]
+        s1b["Laptop<br/>desk 1"]
+    end
+    subgraph s2["SUPER+2"]
+        direction LR
+        s2a["External Monitor<br/>desk 2"]
+        s2b["Laptop<br/>desk 2"]
+    end
+    subgraph s3["SUPER+3"]
+        direction LR
+        s3a["External Monitor<br/>desk 3"]
+        s3b["Laptop<br/>desk 3"]
+    end
+    s1 --> s2 --> s3 --> etc.
+```
+
+**Window arrangement is always stored.** Undock your laptop and the windows from the external monitor behave like normal workspaces, orderly and as expected. Plug it back in and they return to where they were before you undocked.
+
+It runs as a small background program that talks to Hyprland over its
+public IPC socket. It is **not a compositor plugin**, so a Hyprland update
+cannot break the build and you never need `hyprpm`, root, or `sudo` for
+any of it.
+
 ## The problem
 
-Pluging a second monitor into a laptop running Hyprland causes your workspace locations to feel random and scattered. 
+Connecting a second monitor to a laptop running Hyprland makes the workspace locations feel random.
 
-The user has no ability to assign their desired workspace hotkey (`SUPER+N`) to a specific monitor, leaving them stuck with scattered hotkeys:
+There's no ability to assign a desired workspace hotkey (`SUPER+N`) to a specific monitor, leaving you stuck with scattered hotkeys:
 
 ```mermaid
 flowchart TB
@@ -37,51 +70,11 @@ flowchart TB
     end
 ```
 
-## What hyprdesk does
-
-hyprdesk joins all connected monitors into a single **desk**. 
-
-This provides the best of both worlds: **The multi-workspace tiling of hyperland + the simple desktop behavior of windows/mac**
-
-```mermaid
-flowchart LR
-    subgraph s1["SUPER+1"]
-        direction LR
-        b1["External Monitor"<br/>desk 1<br/>]
-        b2["Laptop"<br/>desk 1<br/>]
-    end
-    subgraph s2["SUPER+2"]
-        direction LR
-        a1["External Monitor"<br/>desk 2<br/>]
-        a2["Laptop"<br/>desk 2<br/>]
-    end
-    subgraph s3["SUPER+3"]
-        direction LR
-        c1["External Monitor"<br/>desk 3<br/>]
-        c2["Laptop"<br/>desk 3<br/>]
-    end
-    subgraph s4["SUPER+4"]
-        direction LR
-        d1["External Monitor<br/>desk 4<br/>"]
-        d2["Laptop<br/>desk 4<br/>"]
-    end
-    s1 --> s2 --> s3 --> s4 --> etc.
-```
-
-**Memory is stored on unplugging.** Undock your laptop and the windows from the
-  external monitor behave like normal workspaces, orderly and as expected. Plug it back in and they return to exactly where they were before you undocked.
-
-
-It runs as a small background program that talks to Hyprland over its
-public IPC socket. It is **not a compositor plugin**, so a Hyprland update
-cannot break the build and you never need `hyprpm`, root, or `sudo` for
-any of it.
-
 ## Install
 
 **Requirements:** Hyprland 0.55 or newer using the
 [Lua config](https://hypr.land/news/26_lua/), and
-[Rust](https://rustup.rs). 
+[Rust](https://rustup.rs).
 
 **Optional but recommended:**
 [Omarchy Quattro](https://omarchy.org) for the bar widget.
@@ -136,7 +129,7 @@ can read a pipe.
 
 ## Keybindings
 
-Everything mirrors the stock bindings, so there's nothing new to
+Everything mirrors the stock bindings, there's nothing new to
 learn.
 
 | Keys | What it does |
@@ -149,8 +142,7 @@ learn.
 | `SUPER` + `CTRL` + `TAB` | Jump back to the desk you came from |
 | `SUPER` + scroll | Cycle desks |
 
-
-Every binding is also a command, so you can script them:
+Bindings are also commands, so you can script them:
 
 ```bash
 hyprdesk vdesk 3                # switch every monitor to desk 3
@@ -160,7 +152,6 @@ hyprdesk nextdesk --cycle       # next desk, wrapping at 10
 hyprdesk lastdesk               # back-and-forth
 hyprdesk status --json          # {"desk":3,"last":1}
 ```
-
 
 ## Troubleshooting
 
@@ -195,13 +186,14 @@ reloads. Your windows and workspaces are left exactly where they are.
 | Up to 8 monitors | Supported |
 | Any monitor arrangement | Supported, with nothing to configure. Side by side, stacked, portrait, mixed resolutions and scales all behave the same, because hyprdesk never reads monitor positions |
 
-## Credits
+## Credit where it's due
 
 The behavior hyprdesk emulates was defined by
 [levnikmyskin/hyprland-virtual-desktops](https://github.com/levnikmyskin/hyprland-virtual-desktops),
-an excellent Hyprland plugin. hyprdesk exists because the plugin route
-depends on compositor internals that shift every release, and on `hyprpm`
-state that wants root. 
+an excellent Hyprland plugin.
+
+hyprdesk exists because that plugin relies on compositor internals that move every release, and on `hyprpm`
+state that wants root.
 
 This is an independent implementation over
 Hyprland's stable public IPC instead. No code was copied, the dispatcher
