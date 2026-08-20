@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 400" width="760" height="400" role="img" aria-labelledby="title desc">
+  <title id="title">Stock Hyprland workspaces</title>
+  <desc id="desc">With stock Hyprland, SUPER+1 and SUPER+4 belong to the laptop while SUPER+2, SUPER+3 and SUPER+5 belong to the external monitor, so each key changes only one screen.</desc>
+  <style>
+    .sans { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+            "Noto Sans", Helvetica, Arial, sans-serif; }
+    .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo,
+            Consolas, "Liberation Mono", monospace; }
+  </style>
+  <rect x="1" y="1" width="758" height="398" rx="14" fill="#0d1117" stroke="#30363d" stroke-width="1.5"/>
+  <text x="174.0" y="44" class="sans" font-size="24" font-weight="400" fill="#9198a1" text-anchor="middle">Laptop</text>
+  <rect x="18" y="58" width="312" height="266" rx="14" fill="#21262d" stroke="#3d444d" stroke-width="1.5"/>
+  <rect x="84.0" y="124.0" width="180" height="58" rx="10" fill="#21262d" stroke="#3d444d" stroke-width="1.5"/>
+  <text x="174.0" y="162.0" class="mono" font-size="25" font-weight="600" fill="#e6edf3" text-anchor="middle">SUPER+1</text>
+  <rect x="84.0" y="200.0" width="180" height="58" rx="10" fill="#21262d" stroke="#3d444d" stroke-width="1.5"/>
+  <text x="174.0" y="238.0" class="mono" font-size="25" font-weight="600" fill="#e6edf3" text-anchor="middle">SUPER+4</text>
+  <text x="546.0" y="44" class="sans" font-size="24" font-weight="400" fill="#9198a1" text-anchor="middle">External monitor</text>
+  <rect x="350" y="58" width="392" height="266" rx="14" fill="#21262d" stroke="#3d444d" stroke-width="1.5"/>
+  <rect x="456.0" y="86.0" width="180" height="58" rx="10" fill="#21262d" stroke="#3d444d" stroke-width="1.5"/>
+  <text x="546.0" y="124.0" class="mono" font-size="25" font-weight="600" fill="#e6edf3" text-anchor="middle">SUPER+2</text>
+  <rect x="456.0" y="162.0" width="180" height="58" rx="10" fill="#21262d" stroke="#3d444d" stroke-width="1.5"/>
+  <text x="546.0" y="200.0" class="mono" font-size="25" font-weight="600" fill="#e6edf3" text-anchor="middle">SUPER+3</text>
+  <rect x="456.0" y="238.0" width="180" height="58" rx="10" fill="#21262d" stroke="#3d444d" stroke-width="1.5"/>
+  <text x="546.0" y="276.0" class="mono" font-size="25" font-weight="600" fill="#e6edf3" text-anchor="middle">SUPER+5</text>
+  <text x="380.0" y="366" class="sans" font-size="24" font-weight="400" fill="#9198a1" text-anchor="middle">Each SUPER+N is stuck on one screen.</text>
+</svg>

@@ -1,12 +1,13 @@
 # Assets
 
-`demo.gif` is a real capture of a live two-monitor session;
-`social-preview.png` is drawn from the same diagram the main README uses.
-This file records how each one was made, so any of them can be regenerated
-after a UI change without rediscovering the mechanics.
+`demo.gif` is a real capture of a live two-monitor session; the four
+`*.svg` files are the README's diagrams; `social-preview.png` is the link
+card. This file records how each one was made, so any of them can be
+regenerated after a UI change without rediscovering the mechanics.
 
-No video editor is needed for any of this. Everything below is one
-recorder process and one `ffmpeg` command.
+Nothing here needs a video editor or a design tool. The capture is one
+recorder process and one `ffmpeg` command, and the diagrams are one
+Python script with no dependencies.
 
 ## `demo.gif` - the one that sells the project
 
@@ -181,6 +182,91 @@ OBS also does this, with one "Screen Capture (PipeWire)" source per
 monitor arranged on a single canvas. It works and needs no stitching, but
 it is a much heavier route to the same file.
 
+## The README diagrams - `desks-*.svg` and `stock-workspaces-*.svg`
+
+Two diagrams, each in a light and a dark variant:
+
+| Files | Where they appear |
+|-------|-------------------|
+| `desks-light.svg`, `desks-dark.svg` | "What hyprdesk does" |
+| `stock-workspaces-light.svg`, `stock-workspaces-dark.svg` | "The problem" |
+
+All four are written by one script that needs nothing installed:
+
+```bash
+python3 assets/render-diagrams.py
+```
+
+### Why they are not mermaid
+
+They were mermaid fences first. GitHub renders those inline, so they
+looked free, but a fence has no say in how large it ends up: GitHub
+scales the result to fit the content column, and that column is about
+358px on a phone. Mermaid's default type came out around 1/60th of the
+diagram width, which put the labels near 7px. Unreadable exactly where
+most people meet a README, which is on a phone, following a link from
+Reddit or Discord.
+
+The fix is not a bigger font, it is a **ratio**. Absolute pixel sizes
+mean nothing once the image is scaled; the only thing that survives is
+the font size as a fraction of the viewBox width. The script lays
+everything out against that budget:
+
+| Element | Fraction of the width | On a phone | On a desktop README |
+|---------|-----------------------|------------|---------------------|
+| `desk N`, the container title | 1/25 | 14px | 30px |
+| `SUPER+N` | 1/30 | 12px | 25px |
+| Box labels and captions | 1/32 | 11px | 24px |
+
+That budget is also why the copy inside them is short, and why each
+diagram carries one caption rather than two. A caption runs to about 55
+characters, because a longer line has to be set smaller and the size is
+the thing being protected. Anything needing more words than that belongs
+in the prose around the diagram, not inside it.
+
+The desks diagram is built so each row is a **container named `desk N`**,
+holding one box per monitor. That nesting is the claim the diagram exists
+to make, so it is drawn as nesting rather than stated in a caption. The
+key floats unboxed alongside the title, because a key is not a thing a
+desk contains, it is the way you reach one. The last row is `desk N`
+behind a dashed border, which is what says the count is not three.
+
+SVG rather than PNG for the same reason. These are scaled at both ends,
+up to 800px on a desktop README and down to the column on a phone, and
+only a vector survives both without going soft. Each file is under 4KB.
+
+### Light and dark
+
+GitHub picks the variant with a `picture` element, which is why there are
+two of each:
+
+```html
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="assets/desks-dark.svg">
+  <img src="assets/desks-light.svg" width="800" alt="...">
+</picture>
+```
+
+Both variants carry an **opaque background** rather than a transparent
+one that would inherit the page. Anything that ignores `picture` and
+falls back to the `img` gets the light file, possibly on a dark page, and
+an opaque card stays readable there instead of becoming dark text on
+dark.
+
+The dark palette is the same Primer dark ramp as `social-preview.png`
+below, so the card and the diagrams read as one family. Both diagrams are
+all-grey, with no row or box picked out in colour. Nothing competes for
+attention, so the only thing the eye is left to follow is the shape of
+the nesting, which is the whole argument.
+
+Fonts are system stacks, never a webfont: an SVG loaded through `img`
+cannot fetch one, and GitHub proxies the file through camo in any case.
+Every label is centred, so a wider fallback font grows symmetrically
+instead of running out of its box. Fit is checked by measuring every
+string against a fallback face rather than by eye: Liberation Sans, which
+carries Arial's metrics and is what a stock Linux box resolves this stack
+to. The tightest label there still leaves 19% of its line spare.
+
 ## `social-preview.png` - the link card
 
 GitHub shows this image whenever the repo is linked on Reddit, Discord, or
@@ -194,10 +280,17 @@ nothing by itself. GitHub only uses it once it is uploaded under Settings,
 then General, then Social preview, and it has to be re-uploaded after any
 change.
 
-It is **1280x640**, the size GitHub documents. The card carries the same
-desks diagram as the main README rather than screenshots, so the two stay
-in step: when the README diagram changes, paste the new source into step 1
-and rebuild.
+It is **1280x640**, the size GitHub documents. The card carries the desks
+diagram rather than a screenshot, because at the size a feed renders a
+link card a screenshot is mush and a diagram still reads.
+
+The card is still built from mermaid, which is where the README diagrams
+started. The README moved to hand-laid SVG for the mobile reasons above;
+the card did not have to follow, because a link card is rendered at one
+fixed size that mermaid handles fine. The consequence is that **these are
+now two sources for one picture, kept in agreement by hand.** Change the
+shape of the desks diagram in `render-diagrams.py` and the mermaid below
+needs the same change, then a re-upload under Settings.
 
 ### The palette
 
@@ -235,8 +328,8 @@ The trailing `style etc.` line is there because `etc.` is a plain node,
 so it would otherwise take `primaryColor` and render in the monitor box
 colour. It stands for the desks that continue past the third, not for a
 monitor inside one, so it is painted as a desk group instead. This is the
-only line the card's copy of the diagram adds to the README's - the graph
-itself is identical, and must stay that way.
+only element the card adds beyond what `desks-light.svg` shows; everything
+else has to keep saying the same thing that file does.
 
 ```bash
 cat > /tmp/card.mmd <<'MMD'

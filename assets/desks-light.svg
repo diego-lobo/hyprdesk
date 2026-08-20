@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 648" width="760" height="648" role="img" aria-labelledby="title desc">
+  <title id="title">hyprdesk desks</title>
+  <desc id="desc">Four desks stacked as rows. Each row is one desk, holding the laptop and the external monitor together, so SUPER+2 switches both screens to desk 2 at once. The fourth row is desk N, standing for as many desks as you want.</desc>
+  <style>
+    .sans { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+            "Noto Sans", Helvetica, Arial, sans-serif; }
+    .mono { font-family: ui-monospace, SFMono-Regular, "SF Mono", Menlo,
+            Consolas, "Liberation Mono", monospace; }
+  </style>
+  <rect x="1" y="1" width="758" height="646" rx="14" fill="#ffffff" stroke="#d1d9e0" stroke-width="1.5"/>
+  <rect x="18" y="18" width="724" height="132" rx="14" fill="#f6f8fa" stroke="#d1d9e0" stroke-width="1.5"/>
+  <text x="380.0" y="57" class="sans" font-size="30" font-weight="700" fill="#1f2328" text-anchor="middle">desk 1</text>
+  <text x="109.0" y="111" class="mono" font-size="25" font-weight="600" fill="#1f2328" text-anchor="middle">SUPER+1</text>
+  <rect x="198" y="70" width="232" height="64" rx="10" fill="#ffffff" stroke="#d1d9e0" stroke-width="1.5"/>
+  <text x="314.0" y="111" class="sans" font-size="24" font-weight="500" fill="#1f2328" text-anchor="middle">Laptop</text>
+  <rect x="444" y="70" width="282" height="64" rx="10" fill="#ffffff" stroke="#d1d9e0" stroke-width="1.5"/>
+  <text x="585.0" y="111" class="sans" font-size="24" font-weight="500" fill="#1f2328" text-anchor="middle">External monitor</text>
+  <rect x="18" y="164" width="724" height="132" rx="14" fill="#f6f8fa" stroke="#d1d9e0" stroke-width="1.5"/>
+  <text x="380.0" y="203" class="sans" font-size="30" font-weight="700" fill="#1f2328" text-anchor="middle">desk 2</text>
+  <text x="109.0" y="257" class="mono" font-size="25" font-weight="600" fill="#1f2328" text-anchor="middle">SUPER+2</text>
+  <rect x="198" y="216" width="232" height="64" rx="10" fill="#ffffff" stroke="#d1d9e0" stroke-width="1.5"/>
+  <text x="314.0" y="257" class="sans" font-size="24" font-weight="500" fill="#1f2328" text-anchor="middle">Laptop</text>
+  <rect x="444" y="216" width="282" height="64" rx="10" fill="#ffffff" stroke="#d1d9e0" stroke-width="1.5"/>
+  <text x="585.0" y="257" class="sans" font-size="24" font-weight="500" fill="#1f2328" text-anchor="middle">External monitor</text>
+  <rect x="18" y="310" width="724" height="132" rx="14" fill="#f6f8fa" stroke="#d1d9e0" stroke-width="1.5"/>
+  <text x="380.0" y="349" class="sans" font-size="30" font-weight="700" fill="#1f2328" text-anchor="middle">desk 3</text>
+  <text x="109.0" y="403" class="mono" font-size="25" font-weight="600" fill="#1f2328" text-anchor="middle">SUPER+3</text>
+  <rect x="198" y="362" width="232" height="64" rx="10" fill="#ffffff" stroke="#d1d9e0" stroke-width="1.5"/>
+  <text x="314.0" y="403" class="sans" font-size="24" font-weight="500" fill="#1f2328" text-anchor="middle">Laptop</text>
+  <rect x="444" y="362" width="282" height="64" rx="10" fill="#ffffff" stroke="#d1d9e0" stroke-width="1.5"/>
+  <text x="585.0" y="403" class="sans" font-size="24" font-weight="500" fill="#1f2328" text-anchor="middle">External monitor</text>
+  <rect x="18" y="456" width="724" height="132" rx="14" fill="#f6f8fa" stroke="#d1d9e0" stroke-width="1.5" stroke-dasharray="9 7"/>
+  <text x="380.0" y="495" class="sans" font-size="30" font-weight="700" fill="#1f2328" text-anchor="middle">desk N</text>
+  <text x="109.0" y="549" class="mono" font-size="25" font-weight="600" fill="#1f2328" text-anchor="middle">SUPER+N</text>
+  <rect x="198" y="508" width="232" height="64" rx="10" fill="#ffffff" stroke="#d1d9e0" stroke-width="1.5"/>
+  <text x="314.0" y="549" class="sans" font-size="24" font-weight="500" fill="#1f2328" text-anchor="middle">Laptop</text>
+  <rect x="444" y="508" width="282" height="64" rx="10" fill="#ffffff" stroke="#d1d9e0" stroke-width="1.5"/>
+  <text x="585.0" y="549" class="sans" font-size="24" font-weight="500" fill="#1f2328" text-anchor="middle">External monitor</text>
+  <text x="380.0" y="622" class="sans" font-size="24" font-weight="400" fill="#59636e" text-anchor="middle">One keypress switches every screen to the same desk.</text>
+</svg>

@@ -4,7 +4,7 @@
 
 **Virtual desktops for Hyprland that behave like workspaces.**
 
-One keypress switches every screen together, like macOS Spaces and
+One keypress moves every screen together, like macOS Spaces and
 Windows virtual desktops.
 
 [![CI](https://github.com/diego-lobo/hyprdesk/actions/workflows/ci.yml/badge.svg)](https://github.com/diego-lobo/hyprdesk/actions/workflows/ci.yml)
@@ -23,25 +23,13 @@ hyprdesk converts all existing/connected monitors into a single **desk**.
 
 This provides the best of both worlds: **the multi-workspace tiling of Hyprland + the simple desktop behavior of Windows/macOS**
 
-```mermaid
-flowchart LR
-    subgraph s1["SUPER+1"]
-        direction LR
-        s1a["External Monitor<br/>desk 1"]
-        s1b["Laptop<br/>desk 1"]
-    end
-    subgraph s2["SUPER+2"]
-        direction LR
-        s2a["External Monitor<br/>desk 2"]
-        s2b["Laptop<br/>desk 2"]
-    end
-    subgraph s3["SUPER+3"]
-        direction LR
-        s3a["External Monitor<br/>desk 3"]
-        s3b["Laptop<br/>desk 3"]
-    end
-    s1 --> s2 --> s3 --> etc.
-```
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/desks-dark.svg">
+    <img src="assets/desks-light.svg" width="800"
+         alt="Four desks stacked as rows. Each row is one desk holding the laptop and the external monitor together, so SUPER+2 switches both screens to desk 2 at once. The fourth row is desk N, standing for as many desks as you want.">
+  </picture>
+</p>
 
 **Window arrangement is always stored.** Undock your laptop and the windows from the external monitor behave like normal workspaces, orderly and as expected. Plug it back in and they return to where they were before you undocked.
 
@@ -56,19 +44,13 @@ Connecting a second monitor to a laptop running Hyprland makes the workspace loc
 
 There's no ability to assign a desired workspace hotkey (`SUPER+N`) to a specific monitor, leaving you stuck with scattered hotkeys:
 
-```mermaid
-flowchart TB
-    subgraph before["Stock Hyprland"]
-        direction LR
-        b1["Laptop<br/>workspace 1<br/>SUPER+1"]
-        b2["External Monitor<br/>workspace 2<br/>SUPER+2"]
-        b3["External Monitor<br/>workspace 3<br/>SUPER+3"]
-        b4["Laptop<br/>workspace 4<br/>SUPER+4"]
-        b5["External Monitor<br/>workspace 5<br/>SUPER+5"]
-        b1 --> b4
-        b2 --> b3 --> b5
-    end
-```
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/stock-workspaces-dark.svg">
+    <img src="assets/stock-workspaces-light.svg" width="800"
+         alt="Stock Hyprland. SUPER+1 and SUPER+4 belong to the laptop while SUPER+2, SUPER+3 and SUPER+5 belong to the external monitor, so each key changes only one screen.">
+  </picture>
+</p>
 
 ## Install
 
@@ -172,7 +154,7 @@ update, is in [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md).
 ```
 
 Removes the binary, unlinks the config, restores the stock bar widget, and
-reloads. Your windows and workspaces are left exactly where they are.
+reloads.
 
 ## Compatibility
 
