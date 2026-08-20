@@ -10,6 +10,7 @@ ENTRY="$HYPR_DIR/hyprland.lua"
 REQUIRE_LINE='require("hypr.hyprdesk")'
 
 say() { printf '\033[1;34m==>\033[0m %s\n' "$1"; }
+die() { printf '\033[1;31merror\033[0m %s\n' "$1" >&2; exit 1; }
 
 # 1. Stop the daemon. Matched on the exact process name, never a pattern.
 if pgrep -x hyprdesk >/dev/null 2>&1; then
@@ -20,7 +21,15 @@ fi
 # 2. Unwire the keybind module.
 if [[ -f $ENTRY ]] && grep -qF "$REQUIRE_LINE" "$ENTRY"; then
   cp "$ENTRY" "$ENTRY.hyprdesk-backup.$(date +%s)"
-  grep -vF "$REQUIRE_LINE" "$ENTRY" >"$ENTRY.tmp" || true
+  # grep exits 1 when it selects nothing, which here just means the file
+  # held the require line and nothing else. Anything above 1 is a real read
+  # failure, and the empty temp file must not land on top of the config.
+  status=0
+  grep -vF "$REQUIRE_LINE" "$ENTRY" >"$ENTRY.tmp" || status=$?
+  if ((status > 1)); then
+    rm -f "$ENTRY.tmp"
+    die "could not read $ENTRY, left it untouched"
+  fi
   mv "$ENTRY.tmp" "$ENTRY"
   say "Removed the require line from hyprland.lua (backup kept alongside it)"
 fi
