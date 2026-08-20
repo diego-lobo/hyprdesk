@@ -1,9 +1,9 @@
 # Assets
 
-`demo.gif` and `social-preview.png` are real captures of a live
-two-monitor session. This file records how each one was made, so any of
-them can be regenerated after a UI change without rediscovering the
-mechanics.
+`demo.gif` is a real capture of a live two-monitor session;
+`social-preview.png` is drawn from the same diagram the main README uses.
+This file records how each one was made, so any of them can be regenerated
+after a UI change without rediscovering the mechanics.
 
 No video editor is needed for any of this. Everything below is one
 recorder process and one `ffmpeg` command.
@@ -194,47 +194,161 @@ nothing by itself. GitHub only uses it once it is uploaded under Settings,
 then General, then Social preview, and it has to be re-uploaded after any
 change.
 
-It is **1280x640**, the size GitHub documents. The two monitors are
-composited separately rather than dropped in as one stacked frame, because
-the stacked frame carries black bands either side of the laptop that read
-as dead space once scaled down to a card:
+It is **1280x640**, the size GitHub documents. The card carries the same
+desks diagram as the main README rather than screenshots, so the two stay
+in step: when the README diagram changes, paste the new source into step 1
+and rebuild.
+
+### The palette
+
+Every colour on the card is a [GitHub Primer
+dark](https://primer.style/foundations/color/overview) token, the same
+design system github.com itself is painted with. That is not decoration:
+the card is displayed inside GitHub's own chrome and in link unfurls that
+imitate it, so borrowing GitHub's neutrals makes it sit in the page
+instead of fighting it. The practical effect is that every grey is drawn
+from one cool ramp, with no second hue mixed in anywhere.
+
+| Role | Token | Hex |
+|------|-------|-----|
+| Page | `canvas.inset` | `#0c111a` to `#070a0f` |
+| Desk group | `canvas.default` | `#0d1117`, border `#30363d` |
+| Monitor box | `canvas.overlay` | `#21262d`, border `#3d444d` |
+| Wordmark | `fg.default` | `#f0f6fc` |
+| `SUPER+N` | white | `#ffffff` |
+| Tagline | `fg.muted` | `#b1bac4` |
+| Arrows | `neutral.emphasis` | `#6e7681` |
+
+The diagram sits **directly on the page**, with no container panel behind
+it. A panel was tried and removed: at this size it read as a slab with
+three boxes stranded on it, and the extra edge competed with the desk
+group borders instead of supporting them. The three surfaces stack in
+value order on their own - page, desk group barely raised off it, monitor
+box raised again - and the group borders do the separating.
+
+Step 1 renders the diagram on a transparent background in that palette.
+`themeVariables` covers the boxes and arrows; the cluster labels need the
+CSS override, because their colour is not exposed as a theme variable.
+`subGraphTitleMargin` is what keeps `SUPER+N` off the top edge of its box.
+
+The trailing `style etc.` line is there because `etc.` is a plain node,
+so it would otherwise take `primaryColor` and render in the monitor box
+colour. It stands for the desks that continue past the third, not for a
+monitor inside one, so it is painted as a desk group instead. This is the
+only line the card's copy of the diagram adds to the README's - the graph
+itself is identical, and must stay that way.
 
 ```bash
-ffmpeg -v error -ss 8 -i /tmp/hyprdesk-demo.mp4 -frames:v 1 /tmp/frame.png
+cat > /tmp/card.mmd <<'MMD'
+%%{init: {'theme':'base','themeVariables':{
+'fontFamily':'JetBrains Mono, DejaVu Sans Mono, monospace',
+'fontSize':'17px',
+'primaryColor':'#21262d',
+'primaryTextColor':'#e6edf3',
+'primaryBorderColor':'#3d444d',
+'lineColor':'#6e7681',
+'clusterBkg':'#0d1117',
+'clusterBorder':'#30363d'
+},'flowchart':{'subGraphTitleMargin':{'top':10,'bottom':14},'padding':18}}}%%
+flowchart LR
+    subgraph s1["SUPER+1"]
+        direction LR
+        s1a["External Monitor<br/>desk 1"]
+        s1b["Laptop<br/>desk 1"]
+    end
+    subgraph s2["SUPER+2"]
+        direction LR
+        s2a["External Monitor<br/>desk 2"]
+        s2b["Laptop<br/>desk 2"]
+    end
+    subgraph s3["SUPER+3"]
+        direction LR
+        s3a["External Monitor<br/>desk 3"]
+        s3b["Laptop<br/>desk 3"]
+    end
+    s1 --> s2 --> s3 --> etc.
+    style etc. fill:#0d1117,stroke:#30363d
+MMD
 
-# Geometry from monitor-layout.sh stacked: external 2560x1440+0+0,
-# laptop 930x578+814+1440.
-magick /tmp/frame.png -crop 2560x1440+0+0 +repage -resize 640x \
-  -bordercolor '#31313f' -border 2 /tmp/ext.png
-magick /tmp/frame.png -crop 930x578+814+1440 +repage -resize 232x \
-  -bordercolor '#31313f' -border 2 /tmp/lap.png
+cat > /tmp/card.css <<'CSS'
+.nodeLabel, .nodeLabel p { color: #e6edf3 !important; }
+.cluster-label .nodeLabel, .cluster-label .nodeLabel p,
+.cluster-label p, .cluster .label { color: #ffffff !important; font-weight: 700 !important; }
+CSS
 
-magick -size 1280x640 gradient:'#15151e-#0a0a10' \
-  \( /tmp/ext.png \) -gravity northwest -geometry +578+72 -composite \
-  \( /tmp/lap.png \) -gravity northwest -geometry +782+448 -composite \
+printf '{"args":["--no-sandbox","--disable-gpu"]}\n' > /tmp/puppeteer.json
+
+PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium \
+  npx @mermaid-js/mermaid-cli -i /tmp/card.mmd -o /tmp/diag.png \
+    -p /tmp/puppeteer.json -C /tmp/card.css -b transparent -s 3
+magick /tmp/diag.png -trim +repage -resize 1152x /tmp/diag-fit.png
+```
+
+The `-trim` matters. Mermaid leaves a few pixels of transparent margin,
+and trimming first is what lets the diagram land on the 64px margin by
+its actual content rather than by its bounding box. 1152 is that margin
+doubled and subtracted from the width, so the diagram spans the full
+column and sets the margin every other element is placed against.
+
+Step 2 composites the card. The layout is three centred blocks stacked
+down the page - wordmark, diagram, tagline - and every gap between and
+around them is the same 64px the diagram already uses left and right.
+
+```bash
+magick -size 1280x640 gradient:'#0c111a-#070a0f' \
+  \( /tmp/diag-fit.png \) -gravity northwest -geometry +64+181 -composite \
+  -gravity north \
   -font /usr/share/fonts/TTF/JetBrainsMonoNerdFont-Bold.ttf \
-  -fill '#f4f4f9' -pointsize 76 -annotate +64+246 'hyprdesk' \
+  -fill '#f0f6fc' -pointsize 58 -annotate +0+64 'hyprdesk' \
+  -gravity north \
   -font /usr/share/fonts/liberation/LiberationSans-Regular.ttf \
-  -fill '#aeaec2' -pointsize 26 \
-  -annotate +66+326 'Virtual desktops for Hyprland' \
-  -annotate +66+361 'that move all your monitors' \
-  -annotate +66+396 'at once.' \
-  -fill '#58e1ff' -draw 'rectangle 64,438 218,442' \
-  -font /usr/share/fonts/TTF/JetBrainsMonoNerdFont-Regular.ttf \
-  -fill '#7e7e96' -pointsize 20 \
-  -annotate +66+494 'no plugin. no hyprpm. no sudo.' \
-  -annotate +66+524 'stable public IPC only.' \
+  -fill '#b1bac4' -pointsize 23 \
+  -annotate +0+553 'Virtual desktops for Hyprland that behave like workspaces.' \
   -strip assets/social-preview.png
 ```
 
-ImageMagick wants font file paths here, not family names; resolve one with
-`fc-match -f '%{file}\n' 'JetBrainsMono Nerd Font:bold'`. The accent colour
-matches the Hyprland badge at the top of the main README.
+Those three y offsets are not free choices, they are what makes the
+margins come out equal. The ink measures 54px for the wordmark, 308 for
+the diagram, 23 for the tagline, which is 385 of the 640 available. The
+remaining 255 splits four ways - top margin, two gaps, bottom margin - so
+each is about 64. Hence `y=64`, then `64+54+63 = 181`, then
+`181+308+64 = 553`, with 64px left under the tagline.
+
+That arithmetic only works because of one non-obvious ImageMagick rule:
+**once `-gravity` is set, the `-annotate +x+y` offset places the top of
+the text, not its baseline.** Reasoning about baselines and descenders
+under gravity produces numbers that are simply wrong. Measure the ink
+instead - render a string alone on transparency with the same gravity and
+offset the card uses, `-trim`, and read the geometry back:
+
+```bash
+magick -size 1280x640 xc:none -gravity north \
+  -font <font> -fill white -pointsize 58 \
+  -annotate +0+64 'hyprdesk' -trim info:
+```
+
+That reports `273x54 ... +504+64`: ink 54px tall starting exactly at the
+requested y, and horizontally centred to within half a pixel. Re-measure
+after any point-size or font change and redo the split above; the three
+ink heights are what the answer is made of.
+
+Three things here are worth not rediscovering:
+
+- **Let mermaid-cli write the PNG.** Rendering to SVG and converting with
+  `magick` yields empty boxes, because mermaid puts every label in a
+  `<foreignObject>` and ImageMagick's SVG renderer drops those entirely.
+- **`-s 3` is what sets the resolution.** `-w` only sizes the browser
+  viewport; the output still comes out at the diagram's natural size, so
+  text ends up soft once scaled to card width.
+- **ImageMagick wants font file paths, not family names.** Resolve one with
+  `fc-match -f '%{file}\n' 'JetBrainsMono Nerd Font:bold'`.
 
 Check the result at around 340px wide before uploading, because that is
-roughly how a feed renders it. Fine detail does not survive: a full-screen
-terminal collapses into a featureless rectangle at that size, while a
-couple of distinct windows with some colour still read as two screens.
+roughly how a feed renders it. The wordmark, the tagline, and the shape
+of the diagram all survive; the labels inside the boxes do not, which is
+the trade for showing the mechanism rather than a screenshot. An earlier
+draft also carried a smaller grey line along the bottom, and dropping it
+is what left the tagline enough room to stay readable at that size.
 
 ## `demo.tape` - the CLI recording script
 
