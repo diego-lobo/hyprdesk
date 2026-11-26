@@ -6,6 +6,15 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- Windows no longer vanish from every desk on Omarchy 4.5 and later.
+  Omarchy's own per-monitor workspaces renumbered desk workspaces into
+  blocks it remembers per physical monitor (for example 11-13 to 31-33),
+  which no desk switch reaches. `hyprdesk.lua` now switches that
+  renumbering off, and warns at login if Omarchy changes the module so
+  the switch no longer applies.
+
 ## [1.0.0] - 2026-08-19
 
 First public release.

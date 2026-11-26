@@ -268,7 +268,7 @@ SUPER+SHIFT+ALT+arrows: decide in sub-decisions above.
 ## Integration points (what to re-check after an Omarchy/Hyprland update)
 
 The daemon's own logic has never broken on an update; the edges have.
-When something stops working, check these four in order:
+When something stops working, check these five in order:
 
 1. **Action grammar.** Does `hyprctl eval 'hl.dispatch(hl.dsp.focus({
    workspace = "1" }))'` still answer `ok`? The table above is the full
@@ -284,6 +284,18 @@ When something stops working, check these four in order:
    `omarchy plugin list` should show `hyprdesk.desks` enabled, and
    `journalctl --user` carries its QML errors. On waybar, check that
    `hyprdesk waybar` still streams.
+5. **Omarchy's own workspace placement.** Omarchy 4.5 added
+   `default/hypr/monitor-workspaces.lua`, which gives each physical
+   monitor (by make, model and serial) a block of ten workspaces and
+   renumbers workspaces into it on every config reload and monitor
+   change. That competes with the slot mapping: seen live 2026-11-25, a
+   monitor Omarchy had filed as block 3 sat in slot 1, and one config
+   save renumbered desks 1-3 from 11-13 to 31-33, out of reach of every
+   desk switch. `hyprdesk.lua` replaces `o.workspaces.reconcile` with a
+   no-op; Omarchy's hooks look the field up each time they fire. Check
+   that `debug.getinfo(o.workspaces.reconcile, 'S').short_src` (dumped to
+   a file through `hyprctl eval`) names `hyprdesk.lua`. If Omarchy renames
+   or restructures the module, the override has to follow it.
 
 Validate config changes with `hyprctl reload` + `hyprctl configerrors`.
 A human eyeballs the visual result; no headless screenshots.

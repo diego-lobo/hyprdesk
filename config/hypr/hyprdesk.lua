@@ -44,6 +44,31 @@ end
 -- inherits the compositor's HYPRLAND_INSTANCE_SIGNATURE directly.
 o.exec_on_start(run("daemon"))
 
+-- Switch off Omarchy's own per-monitor workspaces. Omarchy 4.5 added
+-- default/hypr/monitor-workspaces.lua, which gives each physical monitor
+-- a block of ten workspaces, remembered by make, model and serial, and
+-- renumbers workspaces into those blocks on every config reload and
+-- monitor change. hyprdesk numbers blocks by monitor slot instead, so the
+-- two disagree whenever a monitor's remembered block is not its slot.
+-- Seen live: a monitor Omarchy had filed as block 3 sat in slot 1, and
+-- one config save renumbered desks 1-3 from 11-13 to 31-33, where no
+-- desk switch reaches them. hyprdesk owns workspace placement, so the
+-- reconciler becomes a no-op. Omarchy's hooks look `reconcile` up on the
+-- module table each time they fire, so replacing the field turns off all
+-- of them. Omarchy without the module has no `o.workspaces`; a version
+-- that keeps the module but drops `reconcile` gets a warning instead of
+-- silently fighting the daemon.
+if type(o.workspaces) == "table" then
+  if type(o.workspaces.reconcile) == "function" then
+    o.workspaces.reconcile = function() end
+  else
+    o.exec_on_start(o.notify(
+      "hyprdesk: Omarchy's per-monitor workspaces changed and may renumber desks. "
+        .. "See hyprdesk docs/TROUBLESHOOTING.md."
+    ))
+  end
+end
+
 -- Number row: switch desk, move window to desk, move it silently.
 for desk = 1, 10 do
   local key = "code:" .. tostring(desk + 9)

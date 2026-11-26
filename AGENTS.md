@@ -94,7 +94,7 @@ hyprctl reload && hyprctl configerrors     # must be clean
 hyprdesk status
 ```
 
-The four integration points to re-check after any Hyprland or Omarchy
+The five integration points to re-check after any Hyprland or Omarchy
 update are listed at the end of [`docs/DESIGN.md`](docs/DESIGN.md). The
 daemon's own logic has never broken on an update; the edges have.
 

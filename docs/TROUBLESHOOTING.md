@@ -129,12 +129,52 @@ and sends it back when that monitor slot returns. A window is deliberately
 Also note that memory is keyed to the monitor **slot**, not its name, so a
 display re-enumerating under a different connector name still works.
 
+## Windows are open but no desk shows them
+
+You can hear an app or the bar shows a desk as occupied, but switching to
+that desk shows nothing. List the workspaces:
+
+```bash
+hyprctl workspaces | grep '^workspace'
+```
+
+hyprdesk only uses workspaces `1-10` on the first monitor, `11-20` on the
+second, and so on. A window on a workspace beyond your monitor count (for
+example `31` with two monitors) is out of reach of every desk switch.
+
+On Omarchy 4.5 and later, the usual cause is Omarchy's own per-monitor
+workspaces (`/usr/share/omarchy/default/hypr/monitor-workspaces.lua`). It
+gives each physical monitor a block of ten, remembered in
+`~/.local/state/omarchy/monitor-workspaces`, and renumbers workspaces into
+those blocks on every config reload and monitor change. A monitor it has
+filed as its fourth gets `31-40` even when it is your second screen.
+`~/.local/state/omarchy/monitor-workspaces-merged` lists each workspace it
+renumbered and the number it had before.
+
+`hyprdesk.lua` switches that renumbering off. Check that the switch is
+in effect:
+
+```bash
+hyprctl eval "local f = io.open('/tmp/hyprdesk-reconcile', 'w'); local i = debug.getinfo(o.workspaces.reconcile, 'S'); f:write(i.short_src); f:close()"
+cat /tmp/hyprdesk-reconcile   # expect .../hypr/hyprdesk.lua
+```
+
+To recover the windows, move each one to the same desk on the monitor it
+is on, for example from `31` to `11`:
+
+```bash
+hyprctl eval 'hl.dispatch(hl.dsp.window.move({ window = "address:0x...", workspace = "11", follow = false }))'
+```
+
+Restarting the daemon also recovers them, but it moves them to the first
+monitor, since their own monitor slot does not exist.
+
 ## It broke after a Hyprland or Omarchy update
 
 The daemon's own logic has never broken on an update. The edges have.
-`docs/DESIGN.md` ends with the four integration points to check in order:
-the action grammar, the config entry point, the binds, and the bar. Work
-through that list.
+`docs/DESIGN.md` ends with the five integration points to check in order:
+the action grammar, the config entry point, the binds, the bar, and
+Omarchy's own workspace placement. Work through that list.
 
 If the action grammar changed, this is the fastest check:
 
